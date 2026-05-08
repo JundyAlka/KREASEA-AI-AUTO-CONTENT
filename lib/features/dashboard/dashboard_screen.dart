@@ -1,4 +1,6 @@
-import 'dart:async'; // Add this for Timer
+import 'dart:async';
+import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,1034 +8,710 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../services/auth_service.dart';
 import '../../models/user_profile.dart';
 import '../../models/content_item.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/glass_container.dart';
 import './widgets/analytics_section.dart';
+import './dashboard_providers.dart';
+import '../../services/feature_menu_service.dart';
+import '../../models/feature_menu_item.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
-
   @override
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  late List<ContentItem> _recentItems;
-  late PageController _pageController;
-  late ScrollController _recController;
+  final _bannerController = PageController();
+  int _bannerIndex = 0;
   Timer? _bannerTimer;
-  int _currentBannerIndex = 0;
+  bool _isMenuExpanded = false;
 
   @override
   void initState() {
     super.initState();
-    _recentItems =
-        List.generate(3, (index) => ContentItem.demo(index.toString()));
-    _pageController = PageController(viewportFraction: 0.9, initialPage: 0);
-    _recController = ScrollController();
-
-    // Auto Scroll Recommendation
-    _recController = ScrollController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _bannerTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-        if (_pageController.hasClients) {
-          int nextPage = (_pageController.page?.round() ?? 0) + 1;
-          if (nextPage > 1) nextPage = 0;
-          _pageController.animateToPage(nextPage,
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeInOut);
-        }
-
-        if (_recController.hasClients) {
-          final maxScroll = _recController.position.maxScrollExtent;
-          final currentScroll = _recController.offset;
-          double target = currentScroll + 240.0;
-          if (target > maxScroll) target = 0;
-          _recController.animateTo(target,
-              duration: const Duration(milliseconds: 800),
-              curve: Curves.easeInOut);
-        }
-      });
+    _bannerTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (_bannerController.hasClients) {
+        final next = (_bannerIndex + 1) % 3;
+        _bannerController.animateToPage(next, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+      }
     });
   }
 
   @override
   void dispose() {
     _bannerTimer?.cancel();
-    _pageController.dispose();
-    _recController.dispose();
+    _bannerController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-
     return authState.when(
       data: (userProfile) {
-        // Fallback if null (shouldn't happen in authenticated route)
-        final profile = userProfile ??
-            UserProfile(
-                uid: 'guest',
-                email: '',
-                businessName: 'Tamu',
-                businessType: 'Umum');
+        final profile = userProfile ?? UserProfile(uid: 'guest', email: '', businessName: 'Tamu', businessType: 'Umum');
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final statsAsync = ref.watch(contentStatsProvider);
+        final recentAsync = ref.watch(recentContentProvider);
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.surface,
-          appBar: AppBar(
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Halo, ${profile.businessName} 👋',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
-                Row(
-                  children: [
-                    Icon(_getCategoryIcon(profile.businessType),
-                        size: 14,
-                        color: Theme.of(context).textTheme.bodySmall?.color),
-                    const SizedBox(width: 4),
-                    Text(profile.businessType,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color:
-                                Theme.of(context).textTheme.bodySmall?.color)),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                onPressed: _showNotifications,
-              ),
-              IconButton(
-                icon: const Icon(Icons.diamond_outlined, color: Colors.amber),
-                onPressed: () => _showPremiumModal(context),
-              ),
-            ],
-          ),
+          appBar: _buildAppBar(profile, isDark),
           body: SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 24),
+            padding: const EdgeInsets.only(bottom: 100),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Hero Banner
-                _buildHeroBanner(context)
-                    .animate()
-                    .fade(duration: 600.ms)
-                    .slideY(begin: -0.1, end: 0),
-
+                // 1. BANNER SLIDESHOW
+                _buildBannerSlideshow().animate().fade(duration: 400.ms),
+                // 2. MAIN GENERATE TOOLS
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 24),
-
-                      // 2. Main Stats
-                      _buildStatsCard(context)
-                          .animate()
-                          .fade(delay: 200.ms)
-                          .scale(),
-
-                      const SizedBox(height: 24),
-                      const AnalyticsSection()
-                          .animate()
-                          .fade(delay: 250.ms)
-                          .slideY(begin: 0.1, end: 0),
-
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Rekomendasi Hari Ini 🔥',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
-                      ).animate().fade(delay: 300.ms),
-                      const Text(
-                        'Ide konten siap pakai, tinggal sesuaikan!',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // 3. Daily Recommendations (Horizontal List)
-                      _buildDailyRecommendations(context)
-                          .animate()
-                          .fade(delay: 400.ms)
-                          .slideX(),
-
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Tools Kreator',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
-                      ).animate().fade(delay: 500.ms),
-                      const SizedBox(height: 12),
-
-                      // 4. Shortcuts Grid
-                      _buildShortcuts(context).animate().fade(delay: 600.ms),
-
-                      const SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Konten Terakhir',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          TextButton(
-                            onPressed: () => context.go('/library'),
-                            child: const Text('Lihat Semua'),
-                          ),
-                        ],
-                      ).animate().fade(delay: 700.ms),
-                      const SizedBox(height: 8),
-
-                      // 5. Recent List
-                      _buildRecentList().animate().fade(delay: 800.ms),
-
-                      const SizedBox(height: 24),
-                      // 6. Education / Tips Section
-                      _buildEducationSection(context)
-                          .animate()
-                          .fade(delay: 900.ms),
+                      const Text('Fitur Utama ✨', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text('Buat konten viral dengan kekuatan AI', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.4))),
                     ],
                   ),
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Expanded(child: _MainToolCard(
+                        title: 'Buat Caption AI', subtitle: 'Generate caption viral otomatis',
+                        icon: Icons.auto_awesome_rounded,
+                        gradient: const LinearGradient(colors: [Color(0xFF3D5AFE), Color(0xFF7C4DFF)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        onTap: () => _handleAiFeature('/dashboard/ai_text'),
+                      )),
+                      const SizedBox(width: 14),
+                      Expanded(child: _MainToolCard(
+                        title: 'Desain Banner', subtitle: 'Buat visual konten siap posting',
+                        icon: Icons.palette_rounded,
+                        gradient: const LinearGradient(colors: [Color(0xFFE91E63), Color(0xFFFF5722)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        onTap: () => _handleAiFeature('/dashboard/ai_image'),
+                      )),
+                    ],
+                  ).animate().fade(delay: 100.ms).slideY(begin: 0.1, end: 0),
+                ),
+                // 3. MENU LAINNYA
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: const Text('Menu Lainnya', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _buildFeatureGrid().animate().fade(delay: 200.ms),
+                ),
+                // 4. OVERVIEW STATS
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: const Text('Ringkasan Konten 📊', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _buildOverviewStats(statsAsync).animate().fade(delay: 300.ms),
+                ),
+                // 5. ANALYTICS
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  child: const AnalyticsSection().animate().fade(delay: 400.ms),
+                ),
+                // 6. RECENT CONTENT (only if has content)
+                _buildRecentSection(recentAsync),
+                // 7. TIPS
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  child: _buildTipsSection().animate().fade(delay: 600.ms),
                 ),
               ],
             ),
           ),
         );
       },
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, s) =>
-          Scaffold(body: Center(child: Text('Error load profile: $e'))),
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, s) => Scaffold(body: Center(child: Text('Error: $e'))),
     );
   }
 
-  IconData _getCategoryIcon(String type) {
-    switch (type) {
-      case 'Makanan & Minuman':
-        return Icons.restaurant;
-      case 'Fashion':
-        return Icons.checkroom;
-      case 'Jasa':
-        return Icons.work;
-      case 'Elektronik':
-        return Icons.electrical_services;
-      case 'Kesehatan':
-        return Icons.health_and_safety;
-      default:
-        return Icons.store;
-    }
-  }
-
-  void _showNotifications() {
-    showModalBottomSheet(
-        context: context,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-        builder: (context) => ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                const Text('Notifikasi',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                _notifItem(
-                    'Jadwal Post',
-                    'Konten "Promo Imlek" dijadwalkan besok jam 10:00.',
-                    Icons.calendar_today,
-                    Colors.blue),
-                _notifItem('Tips', 'Cek tren musik TikTok terbaru minggu ini!',
-                    Icons.lightbulb, Colors.orange),
-                _notifItem('System', 'Selamat datang di versi Beta!',
-                    Icons.info, Colors.grey),
-              ],
-            ));
-  }
-
-  Widget _notifItem(String title, String body, IconData icon, Color color) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-            color: color.withOpacity(0.1), shape: BoxShape.circle),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-      subtitle: Text(body, style: const TextStyle(fontSize: 12)),
-    );
-  }
-
-  void _showPremiumModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+  AppBar _buildAppBar(UserProfile profile, bool isDark) {
+    return AppBar(
+      titleSpacing: 16,
+      title: Row(children: [
+        Container(
+          width: 42, height: 42,
+          decoration: BoxDecoration(gradient: AppColors.primaryGradient, borderRadius: BorderRadius.circular(13),
+            boxShadow: [BoxShadow(color: AppColors.grad2.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]),
+          child: Center(child: Text(profile.businessName.isNotEmpty ? profile.businessName[0].toUpperCase() : 'U',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
         ),
-        child: Column(
-          children: [
-            Container(
-              height: 200,
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  Colors.amber,
-                  Colors.orangeAccent
-                ]), // Gold gradient for dashboard
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                      right: -20,
-                      top: -20,
-                      child: Icon(Icons.diamond,
-                          size: 150, color: Colors.white.withOpacity(0.2))),
-                  const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('PREMIUM',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 2)),
-                        Text('Unlock Everything.',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                      top: 16,
-                      right: 16,
-                      child: IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: () => Navigator.pop(context)))
-                ],
-              ),
-            ),
-            // ... (Rest of content similar to settings, strictly visual for now)
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(24),
-                children: [
-                  _benefitItem(
-                      Icons.auto_awesome,
-                      'Unlimited AI Content',
-                      'Buat caption & gambar tanpa batas harian.',
-                      Colors.purple),
-                  _benefitItem(Icons.water_drop_outlined, 'Hapus Watermark',
-                      'Hasil export bersih tanpa logo aplikasi.', Colors.blue),
-                  _benefitItem(Icons.schedule, 'Smart Scheduler',
-                      'Posting otomatis di jam audiens aktif.', Colors.orange),
-                  _benefitItem(Icons.analytics, 'Analytics Pro',
-                      'Lihat performa konten detail & insight.', Colors.green),
-                  _benefitItem(Icons.star, 'Template Premium',
-                      'Akes desain eksklusif para pro.', Colors.pink),
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                        border:
-                            Border.all(color: Colors.amber.withOpacity(0.5)),
-                        borderRadius: BorderRadius.circular(16),
-                        color: Colors.amber.withOpacity(0.1)),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Langganan Bulanan',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        Text('Rp 49.000',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                                color: Colors.amber)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('Pembayaran berhasil! (Simulasi)')));
-                    },
-                    style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.amber,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16))),
-                    child: const Text('Upgrade Pro Sekarang',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                  const SizedBox(height: 16),
-                  const Center(
-                      child: Text('Syarat & Ketentuan berlaku',
-                          style: TextStyle(fontSize: 10, color: Colors.grey))),
-                ],
-              ),
-            )
-          ],
+        const SizedBox(width: 12),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Halo, ${profile.businessName} 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          Row(children: [
+            Icon(_getCategoryIcon(profile.businessType), size: 12, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+            const SizedBox(width: 3),
+            Text(profile.businessType, style: TextStyle(fontSize: 11, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight)),
+          ]),
+        ]),
+      ]),
+      actions: [
+        IconButton(
+          icon: Stack(children: [
+            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.notifications_outlined, size: 20)),
+            Positioned(top: 4, right: 4, child: Container(width: 8, height: 8, decoration: BoxDecoration(color: AppColors.error, shape: BoxShape.circle, border: Border.all(color: AppColors.surfaceDark, width: 1.5)))),
+          ]),
+          onPressed: () => _showNotificationPopup(context),
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeroBanner(BuildContext context) {
-    return SizedBox(
-      height: 200,
-      child: PageView(
-        controller: _pageController,
-        padEnds: false,
-        onPageChanged: (index) {
-          setState(() {
-            _currentBannerIndex = index;
-          });
-        },
-        children: [
-          _BannerCard(
-            imagePath: 'assets/images/banner_sales.png',
-            title: 'Tingkatkan Penjualan!',
-            subtitle: 'Gunakan AI untuk membuat caption promo Imlek.',
-            onTap: () {},
-          ),
-          _BannerCard(
-            imagePath: 'assets/images/banner_design.png',
-            title: 'Desain Story Baru',
-            subtitle: 'Template story kekinian sudah tersedia.',
-            onTap: () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDailyRecommendations(BuildContext context) {
-    final ideas = [
-      {
-        'title': 'Sapa Follower',
-        'type': 'Engagement',
-        'desc': 'Tanya kabar dan suasana hati followers.',
-        'image': 'assets/images/card_engagement.png'
-      },
-      {
-        'title': 'Promo Flash Sale',
-        'type': 'Sales',
-        'desc': 'Diskon 50% hanya untuk 2 jam.',
-        'image': 'assets/images/card_sales.png'
-      },
-      {
-        'title': 'Edukasi Produk',
-        'type': 'Value',
-        'desc': 'Jelaskan manfaat bahan utama produkmu.',
-        'image': 'assets/images/card_value.png'
-      },
-    ];
-
-    return SizedBox(
-      height: 280, // Increased height to prevent layout clipping
-      child: ListView.separated(
-        controller: _recController,
-        scrollDirection: Axis.horizontal,
-        itemCount: ideas.length,
-        padding: const EdgeInsets.only(bottom: 8), // Add padding for shadow
-        separatorBuilder: (c, i) => const SizedBox(width: 16),
-        itemBuilder: (context, index) {
-          final idea = ideas[index];
-          return Container(
-            width: 220,
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () {
-                  context.push('/dashboard/recommendation', extra: idea);
-                },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Image Header
-                    SizedBox(
-                      height: 110,
-                      width: double.infinity,
-                      child: Stack(
-                        children: [
-                          Image.asset(
-                            idea['image']!,
-                            width: double.infinity,
-                            height: 110,
-                            fit: BoxFit.cover,
-                            errorBuilder: (c, e, s) =>
-                                Container(color: Colors.grey.shade300),
-                          ),
-                          Positioned(
-                            top: 12,
-                            left: 12,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                    color: Colors.white.withOpacity(0.2)),
-                              ),
-                              child: Text(
-                                idea['type']!,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Content Body
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              idea['title']!,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              idea['desc']!,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.color),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const Spacer(),
-                            Container(
-                              height: 40,
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(colors: [
-                                  Theme.of(context).primaryColor,
-                                  Theme.of(context)
-                                      .primaryColor
-                                      .withOpacity(0.7)
-                                ]),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: ElevatedButton(
-                                onPressed: () {
-                                  context.push('/dashboard/recommendation',
-                                      extra: idea);
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                ),
-                                child: const Text('Buat Sekarang',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildStatsCard(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Card(
-      elevation: 4,
-      shadowColor: theme.colorScheme.primary.withOpacity(0.2),
-      color:
-          isDark ? const Color(0xFF2C2C2C) : theme.colorScheme.primaryContainer,
-      clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            Expanded(
-              child: _buildStatItem(
-                'Total Konten',
-                '12',
-                onTap: () => context.go('/library'),
-              ),
-            ),
-            VerticalDivider(
-                width: 1, color: theme.dividerColor, indent: 12, endIndent: 12),
-            Expanded(
-              child: _buildStatItem(
-                'Terjadwal',
-                '3',
-                onTap: () => context.go('/schedule'),
-              ),
-            ),
-            VerticalDivider(
-                width: 1, color: theme.dividerColor, indent: 12, endIndent: 12),
-            Expanded(
-              child: _buildStatItem(
-                'Draft',
-                '5',
-                onTap: () => context.go('/library'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatItem(String label, String value, {VoidCallback? onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(value,
-                style:
-                    const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.color
-                        ?.withOpacity(0.7))),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildShortcuts(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _ShortcutCard(
-            label: 'Buat Caption',
-            icon: Icons.auto_awesome, // More modern icon
-            imagePath: 'assets/images/tool_caption.png',
-            onTap: () => context.push('/dashboard/ai_text'),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _ShortcutCard(
-            label: 'Desain AI',
-            icon: Icons.palette_outlined, // More modern icon
-            imagePath: 'assets/images/tool_design.png',
-            onTap: () => context.push('/dashboard/ai_image'),
-          ),
-        ),
+        Padding(padding: const EdgeInsets.only(right: 8), child: IconButton(
+          icon: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.amber.withOpacity(0.12), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.diamond_outlined, color: Colors.amber, size: 20)),
+          onPressed: () => _showPremiumModal(context),
+        )),
       ],
     );
   }
 
-  Widget _buildRecentList() {
-    // Mock images using the newly generated assets
-    final images = [
-      'assets/images/thumb_food.png',
-      'assets/images/thumb_drink.png',
-      'assets/images/thumb_food.png', // Replaced fashion with food
+  IconData _getCategoryIcon(String type) {
+    switch (type) { case 'Makanan & Minuman': return Icons.restaurant; case 'Fashion': return Icons.checkroom; default: return Icons.store; }
+  }
+
+  // ── NOTIFICATION POPUP ──
+  void _showNotificationPopup(BuildContext context) {
+    final notifications = [
+      _NotifItem(icon: Icons.auto_awesome_rounded, color: const Color(0xFF7C4DFF), title: 'Caption berhasil dibuat!', subtitle: 'Caption "Promo Ramadhan" siap digunakan', time: '2 menit lalu', isNew: true),
+      _NotifItem(icon: Icons.schedule_rounded, color: const Color(0xFF00B4DB), title: 'Post dijadwalkan', subtitle: 'Instagram Feed — Besok, 19:00 WIB', time: '15 menit lalu', isNew: true),
+      _NotifItem(icon: Icons.trending_up_rounded, color: const Color(0xFF38EF7D), title: 'Engagement naik +23%', subtitle: 'Konten minggu ini perform lebih baik!', time: '1 jam lalu', isNew: true),
+      _NotifItem(icon: Icons.palette_rounded, color: const Color(0xFFE91E63), title: 'Desain siap diunduh', subtitle: 'Banner "Flash Sale" sudah selesai', time: '3 jam lalu', isNew: false),
+      _NotifItem(icon: Icons.star_rounded, color: Colors.amber, title: 'Fitur Baru: Testimoni Generator', subtitle: 'Buat template request review otomatis', time: 'Kemarin', isNew: false),
+      _NotifItem(icon: Icons.card_giftcard_rounded, color: const Color(0xFFE040FB), title: 'Promo: Upgrade ke Pro 50% OFF', subtitle: 'Berlaku hingga 31 Mei 2026', time: '2 hari lalu', isNew: false),
     ];
 
-    // Improved titles matching the images
-    final titles = [
-      'Paket Dimsum Spesial Imlek',
-      'Menu Baru: Iced Coffee Gula Aren',
-      'Promo Makan Siang Hemat',
-    ];
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _recentItems.length,
-      itemBuilder: (context, index) {
-        final item = _recentItems[index];
-        // Cycle through images if we have more items than images
-        final imagePath = images[index % images.length];
-        final title = titles[index % titles.length];
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
-            ],
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.58,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceDark.withOpacity(0.97),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Column(children: [
+              // Handle bar
+              Container(margin: const EdgeInsets.only(top: 10), width: 36, height: 4, decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(2))),
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text('Notifikasi', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
+                  GestureDetector(
+                    onTap: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Semua notifikasi ditandai sudah dibaca'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1))); },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(color: AppColors.accentLight.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+                      child: const Text('Tandai Dibaca', style: TextStyle(color: AppColors.accentLight, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ]),
+              ),
+              Divider(color: Colors.white.withOpacity(0.06), height: 1),
+              // List
+              Expanded(child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                itemCount: notifications.length,
+                separatorBuilder: (_, __) => Divider(color: Colors.white.withOpacity(0.04), height: 1),
+                itemBuilder: (_, i) {
+                  final n = notifications[i];
+                  return ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: n.color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                      child: Icon(n.icon, color: n.color, size: 17),
+                    ),
+                    title: Row(children: [
+                      Expanded(child: Text(n.title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: n.isNew ? Colors.white : Colors.white60))),
+                      if (n.isNew) Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppColors.accentLight, shape: BoxShape.circle)),
+                    ]),
+                    subtitle: Text('${n.subtitle} · ${n.time}', style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.3)), overflow: TextOverflow.ellipsis),
+                    onTap: () => Navigator.pop(ctx),
+                  );
+                },
+              )),
+            ]),
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                // Navigate to detail
-                context.go('/library/detail', extra: item);
-              },
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.asset(
-                        imagePath,
-                        width: 70,
-                        height: 70,
-                        fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => Container(
-                          width: 70,
-                          height: 70,
-                          color: Colors.grey.shade200,
-                          child: const Icon(Icons.image_not_supported,
-                              color: Colors.grey),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(title,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              // Gradient Icon
-                              ShaderMask(
-                                shaderCallback: (Rect bounds) {
-                                  return LinearGradient(
-                                    colors: [
-                                      Colors.blue.shade400,
-                                      Colors.purple.shade400
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ).createShader(bounds);
-                                },
-                                child: Icon(
-                                  item.type == ContentType.text
-                                      ? Icons.article_outlined
-                                      : Icons.image_outlined,
-                                  size: 16,
-                                  color: Colors
-                                      .white, // Color must be white for ShaderMask to work
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${item.platform.name} • ${item.createdAt.day}/${item.createdAt.month}',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.color),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Theme.of(context).primaryColor.withOpacity(0.1),
-                            Theme.of(context).primaryColor.withOpacity(0.2)
-                          ],
-                        ),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.arrow_forward_ios,
-                          size: 12, color: Theme.of(context).primaryColor),
-                    ),
-                  ],
+        ),
+      ),
+    );
+  }
+
+  // ── PREMIUM MODAL ──
+  void _showPremiumModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.75,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceDark.withOpacity(0.97),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Column(children: [
+              // ── Hero header (compact) ──
+              Container(
+                height: 110, width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(colors: [Color(0xFF7C4DFF), Color(0xFFE040FB)]),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                child: Stack(children: [
+                  Positioned(right: -10, top: -10, child: Icon(Icons.diamond_rounded, size: 90, color: Colors.white.withOpacity(0.1))),
+                  Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 16), child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('PRO PLAN', style: TextStyle(color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 10)),
+                      const SizedBox(height: 2),
+                      const Text('Unlimited Power.', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                    ],
+                  )),
+                  Positioned(top: 8, right: 8, child: IconButton(icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 18), onPressed: () => Navigator.pop(ctx))),
+                ]),
+              ),
+              // ── Benefits (non-scrollable) ──
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.start, children: [
+                    _premiumBenefit(Icons.bolt_rounded, 'Unlimited AI', 'Buat konten tanpa batas harian', AppColors.warning),
+                    const SizedBox(height: 12),
+                    _premiumBenefit(Icons.speed_rounded, 'Fast Processing', 'Prioritas antrian server', AppColors.info),
+                    const SizedBox(height: 12),
+                    _premiumBenefit(Icons.hd_rounded, 'HD Image Downloads', 'Resolusi gambar 4K untuk cetak', AppColors.success),
+                    const SizedBox(height: 12),
+                    _premiumBenefit(Icons.auto_fix_high_rounded, 'Remove Watermarks', 'Hapus watermark otomatis', AppColors.accent),
+                    const SizedBox(height: 12),
+                    _premiumBenefit(Icons.calendar_month_rounded, 'Content Calendar', 'Jadwal konten AI 30 hari', const Color(0xFFF59E0B)),
+                    const SizedBox(height: 12),
+                    _premiumBenefit(Icons.analytics_rounded, 'Advanced Analytics', 'Laporan performa mendalam', const Color(0xFF00B4DB)),
+                  ]),
                 ),
               ),
+              // ── CTA pinned at bottom ──
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                child: Column(children: [
+                  Container(
+                    width: double.infinity, height: 52,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Color(0xFF7C4DFF), Color(0xFFE040FB)]),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [BoxShadow(color: const Color(0xFF7C4DFF).withOpacity(0.4), blurRadius: 16, offset: const Offset(0, 6))],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fitur pembayaran akan segera hadir! 🚀'), behavior: SnackBarBehavior.floating)); },
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                      child: const Text('Langganan Sekarang - Rp 49.000/bln', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextButton(onPressed: () {}, child: const Text('Pulihkan Pembelian', style: TextStyle(color: Colors.white38, fontSize: 11))),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _premiumBenefit(IconData icon, String title, String subtitle, Color color) {
+    return Row(children: [
+      Container(padding: const EdgeInsets.all(9), decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, color: color, size: 18)),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+        Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+      ])),
+    ]);
+  }
+
+  // ── BANNER SLIDESHOW ──
+  Widget _buildBannerSlideshow() {
+    final banners = [
+      _BannerInfo('Buat Konten Viral\ndengan AI 🚀', 'Generate caption & desain profesional dalam hitungan detik.', [const Color(0xFF3D5AFE), const Color(0xFF7C4DFF)], Icons.auto_awesome_rounded),
+      _BannerInfo('Jadwalkan Post\nOtomatis 📅', 'Atur waktu posting di jam terbaik audiens kamu.', [const Color(0xFF00B4DB), const Color(0xFF0083B0)], Icons.schedule_send_rounded),
+      _BannerInfo('Analisis Performa\nReal-time 📊', 'Pantau jangkauan & engagement kontenmu setiap saat.', [const Color(0xFFE040FB), const Color(0xFF7C4DFF)], Icons.insights_rounded),
+    ];
+    return Column(children: [
+      SizedBox(
+        height: 180,
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+          ),
+          child: PageView.builder(
+            controller: _bannerController,
+          onPageChanged: (i) => setState(() => _bannerIndex = i),
+          itemCount: banners.length,
+          itemBuilder: (ctx, i) {
+            final b = banners[i];
+            return Container(
+              margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: b.colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: [BoxShadow(color: b.colors.first.withOpacity(0.3), blurRadius: 16, offset: const Offset(0, 6))],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Stack(children: [
+                  Positioned(right: -20, bottom: -20, child: Icon(b.icon, size: 130, color: Colors.white.withOpacity(0.1))),
+                  Padding(padding: const EdgeInsets.all(16), child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                        child: const Text('FEATURED', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1))),
+                      const SizedBox(height: 8),
+                      Text(b.title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800, height: 1.2)),
+                      const SizedBox(height: 4),
+                      Text(b.sub, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ],
+                  )),
+                ]),
+              ),
+            );
+          },
+        )),
+      ),
+      const SizedBox(height: 6),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(3, (i) => AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        width: _bannerIndex == i ? 20 : 6, height: 6,
+        decoration: BoxDecoration(color: _bannerIndex == i ? AppColors.accentLight : Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(3)),
+      ))),
+    ]);
+  }
+
+  // ── FEATURE GRID (Dynamic + Expandable) ──
+  Widget _buildFeatureGrid() {
+    final allFeatures = ref.watch(featureMenuProvider);
+    final displayCount = _isMenuExpanded ? allFeatures.length : (allFeatures.length > 6 ? 6 : allFeatures.length);
+    final showExpandButton = allFeatures.length > 6;
+
+    return Column(children: [
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        child: GridView.builder(
+          shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 1.0),
+          itemCount: displayCount,
+          itemBuilder: (ctx, i) {
+            final f = allFeatures[i];
+            return _FeatureGridItem(item: f, onTap: () => _onFeatureTap(f));
+          },
+        ),
+      ),
+      if (showExpandButton)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: GestureDetector(
+            onTap: () => setState(() => _isMenuExpanded = !_isMenuExpanded),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.04), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white.withOpacity(0.06))),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text(_isMenuExpanded ? 'Sembunyikan' : 'Lihat Semua Fitur →', style: TextStyle(color: AppColors.accentLight, fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 4),
+                Icon(_isMenuExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: AppColors.accentLight, size: 16),
+              ]),
             ),
           ),
+        ),
+    ]);
+  }
+
+  void _onFeatureTap(FeatureMenuItem f) {
+    if (f.isComingSoon) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${f.name} — Coming Soon!'), duration: const Duration(seconds: 1)));
+      return;
+    }
+    _handleAiFeature(f.route);
+  }
+
+  // ── OVERVIEW STATS ──
+  Widget _buildOverviewStats(AsyncValue<ContentStats> statsAsync) {
+    final stats = statsAsync.valueOrNull ?? const ContentStats(total: 0, scheduled: 0, drafts: 0);
+    return GlassContainer(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      child: IntrinsicHeight(child: Row(children: [
+        Expanded(child: _statCol('Total Konten', '${stats.total}', Icons.article_rounded, AppColors.grad1, () => context.push('/dashboard/metric/total'))),
+        VerticalDivider(width: 1, color: Colors.white.withOpacity(0.08), indent: 8, endIndent: 8),
+        Expanded(child: _statCol('Terjadwal', '${stats.scheduled}', Icons.schedule_rounded, AppColors.warning, () => context.push('/dashboard/metric/scheduled'))),
+        VerticalDivider(width: 1, color: Colors.white.withOpacity(0.08), indent: 8, endIndent: 8),
+        Expanded(child: _statCol('Draft', '${stats.drafts}', Icons.edit_note_rounded, AppColors.success, () => context.push('/dashboard/metric/drafts'))),
+      ])),
+    );
+  }
+
+  Widget _statCol(String label, String value, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(16), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Icon(icon, color: color, size: 20), const SizedBox(height: 8),
+      Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white)),
+      const SizedBox(height: 2),
+      Text(label, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.5)), textAlign: TextAlign.center),
+    ]));
+  }
+
+  // ── RECENT CONTENT (real data, conditional) ──
+  Widget _buildRecentSection(AsyncValue<List<ContentItem>> recentAsync) {
+    return recentAsync.when(
+      data: (items) {
+        if (items.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('Konten Terakhir', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              TextButton(onPressed: () => context.go('/library'), child: const Text('Lihat Semua', style: TextStyle(color: AppColors.accentLight, fontSize: 12))),
+            ]),
+            const SizedBox(height: 8),
+            ...items.map((item) => _RecentContentCard(item: item)).toList(),
+          ]).animate().fade(delay: 500.ms),
         );
       },
+      error: (_, __) => const SizedBox.shrink(),
+      loading: () => const SizedBox.shrink(),
     );
   }
 
-  Widget _buildEducationSection(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              const Color(0xFF2C3E50),
-              const Color(0xFF4CA1AF)
-            ], // Premium teal-dark gradient
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-                color: const Color(0xFF4CA1AF).withOpacity(0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 6))
-          ]),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.lightbulb,
-                color: Colors.amberAccent, size: 28),
-          ),
-          const SizedBox(width: 16),
-          const Expanded(
-              child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Tips Sukses',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontSize: 16)),
-              SizedBox(height: 4),
-              Text(
-                'Posting minimal 3x seminggu meningkatkan engagement sebesar 40%.',
-                style: TextStyle(fontSize: 13, color: Colors.white70),
-              ),
-            ],
-          )),
-        ],
-      ),
-    );
+  // ── TIPS ──
+  Widget _buildTipsSection() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Pusat Edukasi', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 12),
+      _tipCard('Tips Konten Viral 🔥', 'Posting minimal 3x seminggu bisa meningkatkan engagement hingga 40%.', Icons.trending_up_rounded, const Color(0xFFF59E0B)),
+      _tipCard('Waktu Terbaik Post 📅', 'Jam 19.00–21.00 adalah golden hour untuk reach organik tertinggi.', Icons.access_time_rounded, const Color(0xFF3B82F6)),
+    ]);
   }
 
-  Widget _benefitItem(
-      IconData icon, String title, String subtitle, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).textTheme.bodySmall?.color)),
-              ],
-            ),
-          ),
+  Widget _tipCard(String title, String body, IconData icon, Color color) {
+    return Padding(padding: const EdgeInsets.only(bottom: 10), child: GlassContainer(padding: const EdgeInsets.all(16), child: Row(children: [
+      Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, color: color, size: 22)),
+      const SizedBox(width: 14),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 13)),
+        const SizedBox(height: 4),
+        Text(body, style: const TextStyle(fontSize: 11, color: Colors.white54)),
+      ])),
+    ])));
+  }
+
+  void _handleAiFeature(String route, [Object? extra]) {
+    final isGuest = ref.read(authStateProvider).value == null;
+    if (isGuest) {
+      showDialog(context: context, builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.cardDark, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Login Diperlukan', style: TextStyle(color: Colors.white)),
+        content: const Text('Silakan login untuk menggunakan fitur AI.', style: TextStyle(color: Colors.white60)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal', style: TextStyle(color: Colors.white38))),
+          ElevatedButton(onPressed: () { Navigator.pop(ctx); context.push('/login'); },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentLight, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            child: const Text('Login Sekarang')),
         ],
-      ),
-    );
+      ));
+    } else {
+      extra != null ? context.push(route, extra: extra) : context.push(route);
+    }
   }
 }
 
-class _BannerCard extends StatelessWidget {
-  final String imagePath;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
+// ═══════════════════ PRIVATE WIDGETS ═══════════════════
 
-  const _BannerCard({
-    required this.imagePath,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
+class _BannerInfo {
+  final String title, sub;
+  final List<Color> colors;
+  final IconData icon;
+  const _BannerInfo(this.title, this.sub, this.colors, this.icon);
+}
+
+class _MainToolCard extends StatelessWidget {
+  final String title, subtitle; final IconData icon; final LinearGradient gradient; final VoidCallback onTap;
+  const _MainToolCard({required this.title, required this.subtitle, required this.icon, required this.gradient, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(onTap: onTap, child: Container(
+      height: 150,
+      decoration: BoxDecoration(gradient: gradient, borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: gradient.colors.first.withOpacity(0.35), blurRadius: 20, offset: const Offset(0, 8))]),
+      child: ClipRRect(borderRadius: BorderRadius.circular(24), child: Stack(children: [
+        Positioned(right: -15, bottom: -15, child: Icon(icon, size: 90, color: Colors.white.withOpacity(0.12))),
+        Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(14)),
+            child: Icon(icon, color: Colors.white, size: 22)),
+          const Spacer(),
+          Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 3),
+          Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10), maxLines: 2),
+        ])),
+      ])),
+    ));
+  }
+}
+
+class _RecentContentCard extends StatelessWidget {
+  final ContentItem item;
+  const _RecentContentCard({required this.item});
+
+  Color _platformColor() {
+    switch (item.platform) {
+      case ContentPlatform.instagramFeed: case ContentPlatform.instagramStory: return const Color(0xFFE1306C);
+      case ContentPlatform.tiktok: return const Color(0xFF69C9D0);
+      case ContentPlatform.whatsapp: return const Color(0xFF25D366);
+      case ContentPlatform.facebook: return const Color(0xFF1877F2);
+      default: return AppColors.grad1;
+    }
+  }
+
+  IconData _platformIcon() {
+    switch (item.platform) {
+      case ContentPlatform.instagramFeed: case ContentPlatform.instagramStory: return Icons.camera_alt_rounded;
+      case ContentPlatform.tiktok: return Icons.music_note_rounded;
+      case ContentPlatform.whatsapp: return Icons.chat_rounded;
+      case ContentPlatform.facebook: return Icons.facebook_rounded;
+      default: return Icons.article_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _platformColor();
+    return Padding(padding: const EdgeInsets.only(bottom: 10), child: GlassContainer(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => context.go('/library/detail', extra: item),
+        child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+          // Dynamic platform thumbnail
+          Container(width: 52, height: 52,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14),
+              gradient: LinearGradient(colors: [color.withOpacity(0.3), color.withOpacity(0.1)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
+            child: Icon(_platformIcon(), color: color, size: 22)),
+          const SizedBox(width: 14),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            Row(children: [
+              Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                child: Text(item.platform.name, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold))),
+              const SizedBox(width: 6),
+              Text('${item.createdAt.day}/${item.createdAt.month}', style: const TextStyle(fontSize: 10, color: Colors.white24)),
+            ]),
+          ])),
+          const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.white24),
+        ])),
+      ),
+    ));
+  }
+}
+
+class _FeatureGridItem extends StatelessWidget {
+  final FeatureMenuItem item;
+  final VoidCallback onTap;
+  const _FeatureGridItem({required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(right: 16, bottom: 8, top: 8),
-        decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            image: DecorationImage(
-              image: AssetImage(imagePath),
-              fit: BoxFit.cover,
-              colorFilter: ColorFilter.mode(
-                  Colors.black.withOpacity(0.3), BlendMode.darken),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
-            ]),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Text(title,
-                style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            const SizedBox(height: 4),
-            Text(subtitle,
-                style: const TextStyle(fontSize: 14, color: Colors.white)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ShortcutCard extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final String imagePath;
-  final VoidCallback onTap;
-
-  const _ShortcutCard({
-    required this.label,
-    required this.icon,
-    required this.imagePath,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        height: 140, // Increased height for better visual
-        decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            image: DecorationImage(
-              image: AssetImage(imagePath),
-              fit: BoxFit.cover,
-              colorFilter: ColorFilter.mode(
-                  Colors.black.withOpacity(0.4), BlendMode.darken),
+            child: Stack(
+              children: [
+                Center(child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(color: item.color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                      child: Icon(item.icon, color: item.color, size: 20),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(item.name, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.white70), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ],
+                )),
+                // Badge
+                if (item.badge.isNotEmpty)
+                  Positioned(
+                    top: 6, right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _badgeColor(item.badge),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(item.badge, style: const TextStyle(fontSize: 7, color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+              ],
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              )
-            ]),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withOpacity(0.2)),
-                ),
-                child: Icon(icon, size: 24, color: Colors.white),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(label,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: Colors.white,
-                      )),
-                  const Icon(Icons.arrow_forward_ios,
-                      color: Colors.white70, size: 14)
-                ],
-              ),
-            ],
           ),
         ),
       ),
     );
   }
+
+  Color _badgeColor(String badge) {
+    switch (badge) {
+      case 'Baru': return const Color(0xFF38EF7D);
+      case 'Pro': return const Color(0xFFFFD93D);
+      case 'Premium': return const Color(0xFFE91E63);
+      case 'Soon': return Colors.white.withOpacity(0.15);
+      default: return Colors.white24;
+    }
+  }
+}
+
+class _NotifItem {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final String time;
+  final bool isNew;
+  const _NotifItem({required this.icon, required this.color, required this.title, required this.subtitle, required this.time, this.isNew = false});
 }

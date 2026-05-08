@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_profile.dart';
+import '../main.dart' show isFirebaseInitialized;
 
 // Interface
 abstract class AuthService {
@@ -14,12 +16,46 @@ abstract class AuthService {
   Future<void> signInWithGoogle();
   Future<void> signOut();
   Future<void> updateProfile(UserProfile profile);
-  UserProfile? get currentUser; // Add direct access
+  UserProfile? get currentUser;
 }
 
-// Stub Implementation for Development without Firebase setup
-// Stub Implementation for Development without Firebase setup
+/// Guest-mode auth service that works without Firebase
+class GuestAuthService implements AuthService {
+  UserProfile? _currentUser;
 
+  @override
+  UserProfile? get currentUser => _currentUser;
+
+  @override
+  Stream<UserProfile?> get authStateChanges => Stream.value(null);
+
+  @override
+  Future<void> signIn(String email, String password) async {
+    _currentUser = UserProfile(uid: 'guest', email: email, businessName: 'Guest User', isOnboardingComplete: true);
+  }
+
+  @override
+  Future<void> signUp(String email, String password) async {
+    _currentUser = UserProfile(uid: 'guest', email: email, isOnboardingComplete: false);
+  }
+
+  @override
+  Future<void> signInWithGoogle() async {
+    throw Exception('Google Sign-In tidak tersedia dalam mode Guest. Silakan coba lagi nanti.');
+  }
+
+  @override
+  Future<void> signOut() async {
+    _currentUser = null;
+  }
+
+  @override
+  Future<void> updateProfile(UserProfile profile) async {
+    _currentUser = profile;
+  }
+}
+
+/// Firebase-backed auth service
 class FirebaseAuthService implements AuthService {
   final _auth = firebase_auth.FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
@@ -47,7 +83,7 @@ class FirebaseAuthService implements AuthService {
             email: firebaseUser.email ?? '',
             isOnboardingComplete: false);
       } catch (e) {
-        print('Error fetching user profile: $e'); // Add logging
+        debugPrint('Error fetching user profile: $e');
         return UserProfile(
             uid: firebaseUser.uid, email: firebaseUser.email ?? '');
       }
@@ -75,8 +111,7 @@ class FirebaseAuthService implements AuthService {
             .doc(newUser.uid)
             .set(newUser.toMap());
       } catch (e) {
-        print('Error creating user profile in Firestore: $e');
-        // Continue event if firestore fails, so user can at least login
+        debugPrint('Error creating user profile in Firestore: $e');
       }
     }
   }
@@ -120,7 +155,7 @@ class FirebaseAuthService implements AuthService {
         }
       }
     } catch (e) {
-      print('Error in Google Sign In: $e');
+      debugPrint('Error in Google Sign In: $e');
       rethrow;
     }
   }
@@ -139,16 +174,19 @@ class FirebaseAuthService implements AuthService {
             .doc(_auth.currentUser!.uid)
             .set(profile.toMap(), SetOptions(merge: true));
       } catch (e) {
-        print('Error updating user profile in Firestore: $e');
-        // Swallow error to allow app navigation to proceed even if persistence fails
+        debugPrint('Error updating user profile in Firestore: $e');
       }
     }
   }
 }
 
-// Provider
+// Provider — automatically selects Firebase or Guest based on init status
 final authServiceProvider = Provider<AuthService>((ref) {
-  return FirebaseAuthService();
+  if (isFirebaseInitialized) {
+    return FirebaseAuthService();
+  }
+  debugPrint('⚠️ Firebase not available — using GuestAuthService');
+  return GuestAuthService();
 });
 
 final authStateProvider = StreamProvider<UserProfile?>((ref) {

@@ -5,6 +5,7 @@ import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
+import '../features/dashboard/metric_detail_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/schedule/schedule_content_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -13,15 +14,21 @@ import '../features/ai_text/ai_text_screen.dart';
 import '../features/ai_image/ai_image_screen.dart';
 import '../features/content_detail/content_detail_screen.dart';
 import '../features/recommendation_detail/recommendation_detail_screen.dart';
+import '../features/testimoni/testimoni_screen.dart';
+import '../features/nama_produk/nama_produk_screen.dart';
+import '../features/gmaps/gmaps_screen.dart';
+import '../features/wa_blast/wa_blast_screen.dart';
+import '../features/balasan_dm/balasan_dm_screen.dart';
+import '../features/hpp/hpp_screen.dart';
+import '../features/content_calendar/calendar_screen.dart';
 import '../models/content_item.dart';
 import '../widgets/scaffold_with_navbar.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
-final _sectionNavigatorKey = GlobalKey<NavigatorState>();
 
 final router = GoRouter(
   navigatorKey: _rootNavigatorKey,
-  initialLocation: '/login',
+  initialLocation: '/dashboard',
   routes: [
     GoRoute(
       path: '/login',
@@ -35,6 +42,14 @@ final router = GoRouter(
       path: '/onboarding',
       builder: (context, state) => const OnboardingScreen(),
     ),
+    // ── Feature routes (hide bottom nav) ──
+    GoRoute(path: '/features/testimoni', builder: (context, state) => const TestimoniScreen()),
+    GoRoute(path: '/features/nama_produk', builder: (context, state) => const NamaProdukScreen()),
+    GoRoute(path: '/features/gmaps', builder: (context, state) => const GmapsScreen()),
+    GoRoute(path: '/features/wa_blast', builder: (context, state) => const WaBlastScreen()),
+    GoRoute(path: '/features/balasan_dm', builder: (context, state) => const BalasanDmScreen()),
+    GoRoute(path: '/features/hpp', builder: (context, state) => const HppScreen()),
+    GoRoute(path: '/features/calendar', builder: (context, state) => const ContentCalendarScreen()),
     // Stateful Nested Navigation for Bottom Bar
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
@@ -57,14 +72,22 @@ final router = GoRouter(
                     parentNavigatorKey: _rootNavigatorKey, 
                     builder: (context, state) => const AiImageScreen(),
                   ),
-                  GoRoute(
-                    path: 'recommendation', // /dashboard/recommendation
-                    parentNavigatorKey: _rootNavigatorKey,
-                    builder: (context, state) {
-                      final data = (state.extra is Map<String, dynamic>) ? state.extra as Map<String, dynamic> : <String, dynamic>{'title': 'Error', 'type': 'Error', 'desc': 'Data missing', 'image': ''};
-                      return RecommendationDetailScreen(data: data);
-                    },
-                  ),
+                   GoRoute(
+                     path: 'recommendation', // /dashboard/recommendation
+                     parentNavigatorKey: _rootNavigatorKey,
+                     builder: (context, state) {
+                       final data = (state.extra is Map<String, dynamic>) ? state.extra as Map<String, dynamic> : <String, dynamic>{'title': 'Error', 'type': 'Error', 'desc': 'Data missing', 'image': ''};
+                       return RecommendationDetailScreen(data: data);
+                     },
+                   ),
+                   GoRoute(
+                     path: 'metric/:type', // /dashboard/metric/reach etc.
+                     parentNavigatorKey: _rootNavigatorKey,
+                     builder: (context, state) {
+                       final type = state.pathParameters['type'] ?? 'reach';
+                       return MetricDetailScreen(metricType: type);
+                     },
+                   ),
               ],
             ),
           ],

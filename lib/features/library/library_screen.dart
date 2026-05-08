@@ -1,13 +1,15 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/content_item.dart';
 import '../../repositories/content_repository.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/glass_container.dart';
 
 // Controller/Provider
 final contentStreamProvider = StreamProvider.autoDispose<List<ContentItem>>((ref) {
   final repo = ref.watch(contentRepositoryProvider);
-  // Hardcoded user for demo
   return repo.watchContent('demo-user');
 });
 
@@ -26,130 +28,126 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final mock = GoRouterState.of(context).uri.queryParameters['mock'] == 'true';
-    final contentAsync = mock 
-      ? AsyncValue.data(List.generate(5, (i) => ContentItem.demo(i.toString()))) 
-      : ref.watch(contentStreamProvider);
+    final contentAsync = mock
+        ? AsyncValue.data(List.generate(5, (i) => ContentItem.demo(i.toString())))
+        : ref.watch(contentStreamProvider);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 180.0,
-            floating: false,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              title: const Text('Library Konten', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.asset(
-                    'assets/images/banner_library.png',
-                    fit: BoxFit.cover,
-                  ),
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      body: Column(
+        children: [
+          // Gradient Header
+          const GlassGradientHeader(
+            title: 'Library Konten',
+            subtitle: 'Kelola semua konten yang pernah kamu buat',
+            icon: Icons.folder_rounded,
           ),
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _StickyHeaderDelegate(
-              minHeight: 140.0,
-              maxHeight: 140.0,
-              child: Container(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Column(
-                  children: [
-                    TextField(
-                      onChanged: (v) => setState(() => _searchQuery = v),
-                      decoration: InputDecoration(
-                        hintText: 'Cari konten lama...',
-                        prefixIcon: const Icon(Icons.search),
-                        filled: true,
-                        fillColor: Theme.of(context).cardColor,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: _filters.map((filter) {
-                          final isSelected = _selectedFilter == filter;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(filter),
-                              selected: isSelected,
-                              onSelected: (selected) => setState(() => _selectedFilter = filter),
-                              selectedColor: Theme.of(context).primaryColor,
-                              labelStyle: TextStyle(color: isSelected ? Colors.white : null),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          contentAsync.when(
-            data: (items) {
-               // Mock filtering logic since we don't have real backend filtering yet
-               final filteredItems = items.where((item) {
-                 final matchesSearch = item.title.toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                                       item.body.toLowerCase().contains(_searchQuery.toLowerCase());
-                 final matchesFilter = _selectedFilter == 'Semua' || 
-                                       item.platform.name.contains(_selectedFilter) ||
-                                       (_selectedFilter == 'Draft' && false); // Mock
-                 return matchesSearch && matchesFilter;
-               }).toList();
 
-              if (filteredItems.isEmpty) {
-                return const SliverFillRemaining(
-                  child: Center(
+          // Search & Filter
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Column(
+              children: [
+                // Glass Search Bar
+                GlassContainer(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: TextField(
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Cari konten...',
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.5)),
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Filter Pills
+                SizedBox(
+                  height: 36,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _filters.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      final filter = _filters[i];
+                      final isSelected = _selectedFilter == filter;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedFilter = filter),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            gradient: isSelected
+                                ? const LinearGradient(colors: [AppColors.grad1, AppColors.grad2])
+                                : null,
+                            color: isSelected ? null : Colors.white.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? Colors.transparent : Colors.white.withOpacity(0.1),
+                            ),
+                          ),
+                          child: Text(
+                            filter,
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : Colors.white60,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Content List
+          Expanded(
+            child: contentAsync.when(
+              data: (items) {
+                final filteredItems = items.where((item) {
+                  final matchesSearch = item.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                      item.body.toLowerCase().contains(_searchQuery.toLowerCase());
+                  final matchesFilter = _selectedFilter == 'Semua' ||
+                      item.platform.name.contains(_selectedFilter) ||
+                      (_selectedFilter == 'Draft' && false);
+                  return matchesSearch && matchesFilter;
+                }).toList();
+
+                if (filteredItems.isEmpty) {
+                  return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.inbox, size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text('Tidak ada konten ditemukan', style: TextStyle(color: Colors.grey)),
+                        Icon(Icons.inbox_rounded, size: 64, color: Colors.white.withOpacity(0.2)),
+                        const SizedBox(height: 16),
+                        const Text('Tidak ada konten ditemukan', style: TextStyle(color: Colors.white38)),
                       ],
                     ),
-                  ),
-                );
-              }
-              
-              return SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final item = filteredItems[index];
+                  );
+                }
 
-                      return _ContentCard(item: item);
-                    },
-                    childCount: filteredItems.length,
-                  ),
-                ),
-              );
-            },
-            error: (e, st) => SliverFillRemaining(child: Center(child: Text('Error: $e'))),
-            loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                  itemCount: filteredItems.length,
+                  itemBuilder: (context, index) {
+                    return _GlassContentCard(item: filteredItems[index]);
+                  },
+                );
+              },
+              error: (e, st) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+              loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accentLight)),
+            ),
           ),
         ],
       ),
@@ -157,154 +155,93 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 }
 
-class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final double minHeight;
-  final double maxHeight;
-  final Widget child;
-
-  _StickyHeaderDelegate({required this.minHeight, required this.maxHeight, required this.child});
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
-
-  @override
-  double get maxExtent => maxHeight;
-
-  @override
-  double get minExtent => minHeight;
-
-  @override
-  bool shouldRebuild(_StickyHeaderDelegate oldDelegate) => 
-      maxHeight != oldDelegate.maxHeight || minHeight != oldDelegate.minHeight || child != oldDelegate.child;
-}
-
-class _ContentCard extends StatelessWidget {
+class _GlassContentCard extends StatelessWidget {
   final ContentItem item;
-
-  const _ContentCard({required this.item});
+  const _GlassContentCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    // Generate a random-ish color based on platform
-    Color tagColor = Colors.blue;
+    Color tagColor = AppColors.grad1;
     IconData icon = Icons.article;
     if (item.platform.name.toLowerCase().contains('instagram')) {
-       tagColor = Colors.purple;
-       icon = Icons.camera_alt;
+      tagColor = const Color(0xFFE1306C);
+      icon = Icons.camera_alt;
     } else if (item.platform.name.toLowerCase().contains('tiktok')) {
-       tagColor = Colors.black;
-       icon = Icons.music_note;
+      tagColor = const Color(0xFF69C9D0);
+      icon = Icons.music_note;
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      clipBehavior: Clip.antiAlias,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: () {
-          context.go('/library/detail', extra: item);
-        }, // Open detail
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (item.type == ContentType.image && item.imageUrl != null)
-              Stack(
-                children: [
-                  if (item.imageUrl!.startsWith('http'))
-                    Image.network(
-                      item.imageUrl!,
-                      height: 180,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_,__,___) => Container(height: 180, color: Colors.grey[200], child: const Icon(Icons.image_not_supported)),
-                    )
-                  else
-                    Image.asset(
-                      item.imageUrl!,
-                      height: 180,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_,__,___) => Container(height: 180, color: Colors.grey[200], child: const Icon(Icons.image_not_supported)),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GlassContainer(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => context.go('/library/detail', extra: item),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                // Thumbnail
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: LinearGradient(
+                      colors: [tagColor.withOpacity(0.3), tagColor.withOpacity(0.1)],
                     ),
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(20)),
-                      child: Text(item.platform.name, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ),
-                  )
-                ],
-              ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: tagColor.withOpacity(0.1), shape: BoxShape.circle),
-                        child: Icon(icon, size: 16, color: tagColor),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item.title, 
-                          maxLines: 1, 
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.more_vert, size: 20, color: Colors.grey),
-                         padding: EdgeInsets.zero,
-                         constraints: const BoxConstraints(),
-                         onPressed: () {},
-                      )
-                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    item.body,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8), height: 1.4),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(),
-                  const SizedBox(height: 4),
-                  Row(
+                  child: Icon(icon, color: tagColor, size: 24),
+                ),
+                const SizedBox(width: 14),
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.calendar_today, size: 12, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
                       Text(
-                        '${item.createdAt.day} ${_getMonthName(item.createdAt.month)} ${item.createdAt.year}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
                       ),
-                      const Spacer(),
-                      TextButton.icon(
-                        style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                        onPressed: (){}, 
-                        icon: const Icon(Icons.share, size: 14), 
-                        label: const Text('Share', style: TextStyle(fontSize: 12))
-                      )
+                      const SizedBox(height: 4),
+                      Text(
+                        item.body,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, color: Colors.white38),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: tagColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              item.platform.name,
+                              style: TextStyle(color: tagColor, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${item.createdAt.day}/${item.createdAt.month}/${item.createdAt.year}',
+                            style: const TextStyle(fontSize: 10, color: Colors.white24),
+                          ),
+                        ],
+                      ),
                     ],
-                  )
-                ],
-              ),
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.white24),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
-  }
-
-  String _getMonthName(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', ' Okt', 'Nov', 'Des'];
-    return months[month - 1];
   }
 }

@@ -2,11 +2,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/auth_service.dart';
-import '../../widgets/app_button.dart';
+import '../../theme/app_theme.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -20,48 +19,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
     try {
       final authService = ref.read(authServiceProvider);
       await authService.signIn(
           _emailController.text.trim(), _passwordController.text);
-      if (mounted) {
-        context.go('/dashboard');
-      }
+      if (mounted) context.go('/dashboard');
     } on FirebaseAuthException catch (e) {
-      String errorMessage = 'Terjadi kesalahan saat login';
+      String msg = 'Terjadi kesalahan saat login';
       if (e.code == 'user-not-found' ||
           e.code == 'invalid-credential' ||
           e.code == 'wrong-password') {
-        errorMessage = 'Email tidak ditemukan di database atau password salah';
+        msg = 'Email atau password salah';
       } else if (e.code == 'invalid-email') {
-        errorMessage = 'Format email tidak valid';
+        msg = 'Format email tidak valid';
       } else {
-        errorMessage = e.message ?? 'Terjadi kesalahan yang tidak diketahui';
+        msg = e.message ?? msg;
       }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (mounted) _showError(msg);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (mounted) _showError('Error: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -72,268 +60,304 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final authService = ref.read(authServiceProvider);
       await authService.signInWithGoogle();
-      if (mounted) {
-        context.go('/dashboard');
-      }
+      if (mounted) context.go('/dashboard');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal login dengan Google: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (mounted) _showError('Gagal login dengan Google: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white, size: 18),
+            const SizedBox(width: 10),
+            Expanded(child: Text(msg)),
+          ],
+        ),
+        backgroundColor: AppColors.error,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
+      backgroundColor:
+          isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
       body: Stack(
         children: [
-          // Background Gradient
-          Container(
-            width: size.width,
-            height: size.height,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Color(0xFF1A1A2E), // Midnight Deep Blue
-                  Color(0xFF16213E), // Darker Blue
-                  Color(0xFF0F3460), // Royal Blue
-                  Color(0xFF533483), // Purple accent
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+          // ── Decorative background blobs ────────────────────────────────────
+          Positioned(
+            top: -60,
+            right: -60,
+            child: _Blob(
+              size: size.width * 0.55,
+              color: AppColors.grad2.withOpacity(isDark ? 0.25 : 0.15),
+            ),
+          ),
+          Positioned(
+            bottom: -80,
+            left: -60,
+            child: _Blob(
+              size: size.width * 0.65,
+              color: AppColors.grad1.withOpacity(isDark ? 0.2 : 0.10),
             ),
           ),
 
-          // Animated Orbs (Optional for 10x look)
-          Positioned(
-            top: -50,
-            right: -50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.purple.withOpacity(0.2),
-              ),
-            ).animate().shimmer(duration: 5.seconds),
-          ),
-          Positioned(
-            bottom: -100,
-            left: -100,
-            child: Container(
-              width: 350,
-              height: 350,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blue.withOpacity(0.15),
-              ),
-            ).animate().shimmer(duration: 7.seconds),
-          ),
-
-          // Main Content
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  // App Branding
-                  Column(
+          // ── Content ────────────────────────────────────────────────────────
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                              color: Colors.white.withOpacity(0.2), width: 2),
-                        ),
-                        child: const Icon(Icons.auto_awesome,
-                            size: 48, color: Colors.white),
-                      )
-                          .animate()
-                          .scale(duration: 600.ms, curve: Curves.easeOutBack),
-                      const SizedBox(height: 16),
-                      Text(
-                        'AI Content Studio',
-                        style: GoogleFonts.outfit(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.3),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Smart Solutions for Modern UMKM',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          color: Colors.white.withOpacity(0.7),
-                        ),
-                      ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.3),
-                    ],
-                  ),
-
-                  const SizedBox(height: 48),
-
-                  // Glassmorphic Card
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        padding: const EdgeInsets.all(32),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.2),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 20,
-                              spreadRadius: 5,
-                            ),
-                          ],
-                        ),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Email Field
-                              _buildTextField(
-                                controller: _emailController,
-                                label: 'Email Address',
-                                icon: Icons.alternate_email_rounded,
-                                keyboardType: TextInputType.emailAddress,
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Email cannot be empty';
-                                  }
-                                  if (!value.contains('@')) {
-                                    return 'Invalid email format';
-                                  }
-                                  return null;
-                                },
-                              ).animate().fadeIn(delay: 600.ms).slideX(),
-
-                              const SizedBox(height: 20),
-
-                              // Password Field
-                              _buildTextField(
-                                controller: _passwordController,
-                                label: 'Password',
-                                icon: Icons.lock_person_rounded,
-                                isPassword: true,
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Password cannot be empty';
-                                  }
-                                  if (value.length < 6) {
-                                    return 'Min 6 characters';
-                                  }
-                                  return null;
-                                },
-                              ).animate().fadeIn(delay: 700.ms).slideX(),
-
-                              const SizedBox(height: 32),
-
-                              // Login Button
-                              AppButton(
-                                label: 'Masuk Sekarang',
-                                onPressed: _isLoading ? null : _login,
-                                isLoading: _isLoading,
-                              ).animate().fadeIn(delay: 800.ms).scale(),
-
-                              const SizedBox(height: 16),
-
-                              GestureDetector(
-                                onTap: () => context.go('/register'),
-                                child: Text(
-                                  'Belum punya akun? Daftar Gratis',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.outfit(
-                                    color: Colors.white.withOpacity(0.8),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ).animate().fadeIn(delay: 900.ms),
+                      // Logo
+                      Center(
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            gradient: AppColors.primaryGradient,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.grad2.withOpacity(0.4),
+                                blurRadius: 24,
+                                offset: const Offset(0, 8),
+                              ),
                             ],
                           ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Divider
-                  Row(
-                    children: [
-                      Expanded(
-                          child: Divider(color: Colors.white.withOpacity(0.2))),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'Atau Lanjutkan Dengan',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 12,
+                          child: const Icon(
+                            Icons.auto_awesome,
+                            color: Colors.white,
+                            size: 38,
                           ),
                         ),
-                      ),
-                      Expanded(
-                          child: Divider(color: Colors.white.withOpacity(0.2))),
-                    ],
-                  ).animate().fadeIn(delay: 1000.ms),
+                      )
+                          .animate()
+                          .scale(
+                              delay: 100.ms,
+                              duration: 500.ms,
+                              curve: Curves.elasticOut)
+                          .fadeIn(),
 
-                  const SizedBox(height: 24),
+                      const SizedBox(height: 28),
 
-                  // Google Login Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: _isLoading ? null : _loginWithGoogle,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: BorderSide(color: Colors.white.withOpacity(0.3)),
-                        backgroundColor: Colors.white.withOpacity(0.05),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                      // Heading
+                      Text(
+                        'Selamat Datang di',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                        textAlign: TextAlign.center,
+                      )
+                          .animate()
+                          .fadeIn(delay: 200.ms, duration: 500.ms)
+                          .slideY(begin: 0.2, end: 0),
+
+                      const SizedBox(height: 6),
+
+                      Text(
+                        'Kreasea — AI Content Studio',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                        textAlign: TextAlign.center,
+                      )
+                          .animate()
+                          .fadeIn(delay: 300.ms, duration: 500.ms),
+
+                      const SizedBox(height: 40),
+
+                      // ── Email ────────────────────────────────────────────
+                      TextFormField(
+                        controller: _emailController,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          hintText: 'contoh@email.com',
+                          prefixIcon: Icon(Icons.email_outlined),
                         ),
-                      ),
-                      child: Row(
+                        validator: (v) {
+                          if (v == null || v.isEmpty) {
+                            return 'Email tidak boleh kosong';
+                          }
+                          if (!v.contains('@')) {
+                            return 'Masukkan email yang valid';
+                          }
+                          return null;
+                        },
+                      )
+                          .animate()
+                          .fadeIn(delay: 350.ms, duration: 400.ms)
+                          .slideX(begin: -0.05, end: 0),
+
+                      const SizedBox(height: 16),
+
+                      // ── Password ─────────────────────────────────────────
+                      TextFormField(
+                        controller: _passwordController,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          hintText: 'Minimal 6 karakter',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (v == null || v.isEmpty) {
+                            return 'Password tidak boleh kosong';
+                          }
+                          if (v.length < 6) {
+                            return 'Password minimal 6 karakter';
+                          }
+                          return null;
+                        },
+                      )
+                          .animate()
+                          .fadeIn(delay: 400.ms, duration: 400.ms)
+                          .slideX(begin: 0.05, end: 0),
+
+                      // Forgot password
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {},
+                          child: const Text('Lupa Password?'),
+                        ),
+                      ).animate().fadeIn(delay: 450.ms),
+
+                      const SizedBox(height: 8),
+
+                      // ── Login Button ──────────────────────────────────────
+                      _GradientButton(
+                        label: 'Masuk',
+                        isLoading: _isLoading,
+                        onPressed: _isLoading ? null : _login,
+                      )
+                          .animate()
+                          .fadeIn(delay: 500.ms, duration: 400.ms)
+                          .slideY(begin: 0.1, end: 0),
+
+                      const SizedBox(height: 20),
+
+                      // Register link
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Image.network(
-                            'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
-                            height: 24,
-                          ),
-                          const SizedBox(width: 12),
                           Text(
-                            'Google Sign In',
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                            'Belum punya akun?  ',
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                              fontSize: 14,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => context.go('/register'),
+                            child: const Text(
+                              'Daftar',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ).animate().fadeIn(delay: 1100.ms).slideY(begin: 0.5),
-                ],
+                      ).animate().fadeIn(delay: 550.ms),
+
+                      const SizedBox(height: 32),
+
+                      // Divider
+                      Row(
+                        children: [
+                          Expanded(
+                              child: Divider(
+                                  color: isDark
+                                      ? Colors.white12
+                                      : Colors.black12)),
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              'atau',
+                              style: TextStyle(
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                              child: Divider(
+                                  color: isDark
+                                      ? Colors.white12
+                                      : Colors.black12)),
+                        ],
+                      ).animate().fadeIn(delay: 600.ms),
+
+                      const SizedBox(height: 20),
+
+                      // ── Google Sign-In ────────────────────────────────────
+                      _GoogleButton(
+                        isLoading: _isLoading,
+                        onPressed: _isLoading ? null : _loginWithGoogle,
+                        isDark: isDark,
+                      )
+                          .animate()
+                          .fadeIn(delay: 650.ms, duration: 400.ms),
+
+                      const SizedBox(height: 24),
+
+                      // Guest mode link
+                      Center(
+                        child: TextButton(
+                          onPressed: () => context.go('/dashboard'),
+                          child: Text(
+                            'Lanjut tanpa akun →',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                          ),
+                        ),
+                      ).animate().fadeIn(delay: 700.ms),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -341,43 +365,154 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
     );
   }
+}
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool isPassword = false,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: isPassword,
-      keyboardType: keyboardType,
-      validator: validator,
-      style: GoogleFonts.outfit(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: GoogleFonts.outfit(color: Colors.white.withOpacity(0.6)),
-        prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.7)),
-        enabledBorder: OutlineInputBorder(
+// ─── Helper Widgets ────────────────────────────────────────────────────────────
+
+class _Blob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _Blob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+      ),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _GradientButton extends StatelessWidget {
+  final String label;
+  final bool isLoading;
+  final VoidCallback? onPressed;
+
+  const _GradientButton({
+    required this.label,
+    required this.isLoading,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        height: 56,
+        decoration: BoxDecoration(
+          gradient: onPressed == null
+              ? null
+              : AppColors.primaryGradient,
+          color: onPressed == null ? Colors.grey.shade400 : null,
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+          boxShadow: onPressed == null
+              ? []
+              : [
+                  BoxShadow(
+                    color: AppColors.grad2.withOpacity(0.4),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
         ),
-        focusedBorder: OutlineInputBorder(
+        child: Center(
+          child: isLoading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GoogleButton extends StatelessWidget {
+  final bool isLoading;
+  final VoidCallback? onPressed;
+  final bool isDark;
+
+  const _GoogleButton({
+    required this.isLoading,
+    this.onPressed,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E35) : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.white),
+          border: Border.all(
+            color: isDark ? Colors.white12 : Colors.black12,
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.redAccent),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Google G icon substitute using colored circles
+            Container(
+              width: 22,
+              height: 22,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Color(0xFF4285F4), Color(0xFF34A853)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: const Icon(Icons.g_mobiledata,
+                  color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Masuk dengan Google',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                color: isDark
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textPrimaryLight,
+              ),
+            ),
+          ],
         ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.05),
       ),
     );
   }

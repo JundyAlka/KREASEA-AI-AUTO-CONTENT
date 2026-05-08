@@ -1,4 +1,5 @@
-﻿import 'dart:convert';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/env.dart';
@@ -26,7 +27,7 @@ class StabilityAiService {
         throw Exception('Failed to load balance: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error getting balance: $e');
+      debugPrint('Error getting balance: $e');
       return 0.0;
     }
   }

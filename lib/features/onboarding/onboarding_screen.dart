@@ -105,7 +105,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 decoration: const InputDecoration(labelText: 'Nama Bisnis / Brand'),
                 validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               
               DropdownButtonFormField<String>(
                 value: _selectedType,
@@ -113,7 +113,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 items: _businessTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                 onChanged: (v) => setState(() => _selectedType = v),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               DropdownButtonFormField<String>(
                 value: _selectedTone,
@@ -121,14 +121,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 items: _tones.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                 onChanged: (v) => setState(() => _selectedTone = v),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               TextFormField(
                 controller: _audienceController,
                 decoration: const InputDecoration(labelText: 'Target Audiens (Misal: Mahasiswa, Ibu-ibu)'),
                 validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               TextFormField(
                 controller: _descController,
@@ -136,7 +136,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 maxLines: 3,
                 validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 48),
 
               SizedBox(
                 width: double.infinity,

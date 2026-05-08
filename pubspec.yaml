@@ -1,5 +1,5 @@
 name: ai_content_studio_umkm
-description: "A new Flutter project."
+description: "KREASEA - AI Content Studio untuk UMKM Indonesia"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -38,6 +38,14 @@ dev_dependencies:
   riverpod_generator: ^2.4.0
   freezed: ^3.0.6
   json_serializable: ^6.9.5
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/kreasea_icon_original.jpg"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/kreasea_icon_original.jpg"
 
 flutter:
   uses-material-design: true
