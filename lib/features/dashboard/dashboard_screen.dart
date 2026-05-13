@@ -10,9 +10,11 @@ import '../../models/user_profile.dart';
 import '../../models/content_item.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_container.dart';
+import '../../widgets/credit_widgets.dart';
 import './widgets/analytics_section.dart';
 import './dashboard_providers.dart';
 import '../../services/feature_menu_service.dart';
+import '../../services/credit_service.dart';
 import '../../models/feature_menu_item.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -154,11 +156,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         const SizedBox(width: 12),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Halo, ${profile.businessName} 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          Row(children: [
-            Icon(_getCategoryIcon(profile.businessType), size: 12, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
-            const SizedBox(width: 3),
-            Text(profile.businessType, style: TextStyle(fontSize: 11, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight)),
-          ]),
+          // ── Credit mini bar ────────────────────────────
+          Consumer(builder: (ctx, ref, _) {
+            final creditsAsync = ref.watch(userCreditsProvider);
+            return creditsAsync.when(
+              data: (credits) => Row(children: [
+                const Icon(Icons.bolt_rounded, size: 10, color: Colors.amber),
+                const SizedBox(width: 2),
+                Text('🖼️ ${credits.imageCredits}', style: const TextStyle(fontSize: 10, color: Colors.white54)),
+                const SizedBox(width: 6),
+                Text('✍️ ${credits.captionCredits}', style: const TextStyle(fontSize: 10, color: Colors.white54)),
+                const SizedBox(width: 4),
+                Text('/ hari', style: const TextStyle(fontSize: 9, color: Colors.white24)),
+              ]),
+              loading: () => const Text('...', style: TextStyle(fontSize: 10, color: Colors.white24)),
+              error: (_, __) => const SizedBox.shrink(),
+            );
+          }),
         ]),
       ]),
       actions: [

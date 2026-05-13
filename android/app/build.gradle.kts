@@ -1,12 +1,14 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // Flutter Gradle Plugin (harus setelah android & kotlin)
     id("dev.flutter.flutter-gradle-plugin")
+    // Google Services — untuk memproses google-services.json
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.kreasea.app"
+    namespace = "kreasea01.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +22,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.kreasea.app"
+        // WAJIB cocok dengan package_name di google-services.json
+        applicationId = "kreasea01.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -30,9 +33,18 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Signing dengan debug key (ganti dengan keystore production jika sudah siap)
             signingConfig = signingConfigs.getByName("debug")
+            // Aktifkan minifikasi + ProGuard rules
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            isMinifyEnabled = false
         }
     }
 }

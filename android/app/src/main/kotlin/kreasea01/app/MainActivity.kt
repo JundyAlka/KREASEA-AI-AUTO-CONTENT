@@ -1,4 +1,4 @@
-package com.example.ai_content_studio_umkm
+package kreasea01.app
 
 import io.flutter.embedding.android.FlutterActivity
 

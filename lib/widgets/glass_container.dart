@@ -48,7 +48,8 @@ class GlassContainer extends StatelessWidget {
   }
 }
 
-/// A gradient header that replaces SliverAppBar banner images.
+/// A gradient header with safe-area padding and clipped overflow.
+/// Fixes: icon/text "tembus" saat halaman di-scroll.
 class GlassGradientHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -65,49 +66,58 @@ class GlassGradientHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    final topPad = MediaQuery.of(context).padding.top;
+
+    // ClipRect WAJIB — mencegah icon Positioned menembus area konten saat scroll
+    return ClipRect(
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.fromLTRB(24, topPad + 20, 24, 28),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
         ),
-      ),
-      child: Stack(
-        children: [
-          if (icon != null)
-            Positioned(
-              right: -20,
-              top: -30,
-              child: Icon(icon, size: 120, color: Colors.white.withOpacity(0.08)),
-            ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            // Background icon dekoratif — di-clip agar tidak overflow
+            if (icon != null)
+              Positioned(
+                right: -20,
+                top: -10,
+                child: Icon(icon, size: 110, color: Colors.white.withOpacity(0.08)),
               ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 6),
+            // Konten teks
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 48),
                 Text(
-                  subtitle!,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.white.withOpacity(0.7),
+                  title,
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
                   ),
                 ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    subtitle!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

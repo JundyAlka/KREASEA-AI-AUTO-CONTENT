@@ -1,4 +1,6 @@
-# Miscellaneous
+# ════════════════════════════════════════════════════
+# Flutter/Dart Standard
+# ════════════════════════════════════════════════════
 *.class
 *.log
 *.pyc
@@ -12,57 +14,73 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# IntelliJ / Android Studio
 *.iml
 *.ipr
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
+# Flutter/Dart/Pub
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
-/coverage/
+build/
 
-# Symbolication related
+# Symbolication / Obfuscation
 app.*.symbols
-
-# Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# Android build artifacts
+/android/app/debug/
+/android/app/profile/
+/android/app/release/
+/android/.gradle/
+/android/build/
 
-# ══════════════════════════════════════════════
-# SECURITY — Jangan push file sensitif ke GitHub!
-# ══════════════════════════════════════════════
+# ════════════════════════════════════════════════════
+# 🔐 SECURITY — File sensitif TIDAK boleh di-push!
+# ════════════════════════════════════════════════════
 
 # Environment variables & API Keys
 .env
 .env.local
 .env.production
+.env.staging
+backend/.env
 
-# Firebase config (berisi API keys)
+# Firebase config (berisi API keys & project config)
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 lib/firebase_options.dart
 
+# Firebase service account (backend)
+backend/firebase-service-account.json
+backend/serviceAccountKey.json
+**/service-account*.json
+
 # Signing keys
 *.jks
 *.keystore
+android/key.properties
 key.properties
 
-# Build outputs (APK/AAB)
+# APK / AAB hasil build
 *.apk
 *.aab
+KREASEA-*.apk
+
+# Backend secrets
+backend/node_modules/
+backend/.env*
+!backend/.env.example
+
+# ════════════════════════════════════════════════════
+# IDE / Tools
+# ════════════════════════════════════════════════════
+.vscode/settings.json
+.vscode/launch.json
+*.code-workspace

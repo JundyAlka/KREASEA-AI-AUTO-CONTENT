@@ -41,7 +41,10 @@ class GuestAuthService implements AuthService {
 
   @override
   Future<void> signInWithGoogle() async {
-    throw Exception('Google Sign-In tidak tersedia dalam mode Guest. Silakan coba lagi nanti.');
+    throw Exception(
+      'Login Google memerlukan koneksi Firebase.\n'
+      'Pastikan internet aktif dan coba lagi.'
+    );
   }
 
   @override
@@ -156,6 +159,17 @@ class FirebaseAuthService implements AuthService {
       }
     } catch (e) {
       debugPrint('Error in Google Sign In: $e');
+      final msg = e.toString();
+      if (msg.contains('DEVELOPER_ERROR') || msg.contains('10:')) {
+        throw Exception(
+          'Google Sign-In gagal: SHA-1 fingerprint belum didaftarkan di Firebase Console.\n'
+          'SHA-1 debug: C0:43:8D:21:EE:74:39:32:09:68:9B:56:C9:F1:84:D6:61:47:24:A2\n'
+          'Tambahkan di Firebase Console → Project Settings → Android App.'
+        );
+      }
+      if (msg.contains('network') || msg.contains('Network')) {
+        throw Exception('Tidak ada koneksi internet. Periksa jaringan dan coba lagi.');
+      }
       rethrow;
     }
   }

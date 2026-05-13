@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # ── KreaSea Backend API ──────────────────────────────────────
+  kreasea-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kreasea-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - REDIS_URL=redis://redis:6379
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    volumes:
+      - ./src:/app/src:ro   # hot-reload friendly
+    restart: unless-stopped
+    networks:
+      - kreasea-net
+
+  # ── Redis (Cache untuk key state & response caching) ─────────
+  redis:
+    image: redis:7-alpine
+    container_name: kreasea-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    networks:
+      - kreasea-net
+
+networks:
+  kreasea-net:
+    driver: bridge
+
+volumes:
+  redis_data:

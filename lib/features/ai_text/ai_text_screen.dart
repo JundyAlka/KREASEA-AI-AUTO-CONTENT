@@ -4,11 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/ai_text_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/credit_service.dart';
 import '../../models/user_profile.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_container.dart';
 import '../../widgets/glass_form_field.dart';
 import '../../widgets/ai_result_card.dart';
+import '../../widgets/credit_widgets.dart';
 
 class AiTextScreen extends ConsumerStatefulWidget {
   const AiTextScreen({super.key});
@@ -45,7 +47,14 @@ class _AiTextScreenState extends ConsumerState<AiTextScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mohon lengkapi form utama'), behavior: SnackBarBehavior.floating));
       return;
     }
+
+    // ── Cek & kurangi credit caption ─────────────────────
+    final canProceed = await showCreditGuard(context, CreditType.caption, ref);
+    if (!canProceed || !mounted) return;
+
     setState(() { _isLoading = true; _results = []; });
+    await ref.read(creditServiceProvider).useCredit(CreditType.caption);
+
     try {
       final authService = ref.read(authServiceProvider);
       final userProfile = authService.currentUser ?? UserProfile(uid: 'demo', email: 'demo@mail.com', businessName: 'Bisnis Demo', targetAudience: 'Umum');
@@ -55,10 +64,19 @@ class _AiTextScreenState extends ConsumerState<AiTextScreen> {
       if (_useEmoji) promptProduct += " (Gunakan Emoji)";
       if (_useCTA) promptProduct += " (Sertakan Call-to-Action)";
       promptProduct += " (Bahasa: $_selectedLanguage)";
-      final captions = await service.generateCaptions(userProfile: userProfile, purpose: _selectedPurpose!, platform: _selectedPlatform!, productName: promptProduct, tone: _selectedTone, length: _selectedLength);
+      final captions = await service.generateCaptions(
+        userProfile: userProfile,
+        purpose: _selectedPurpose!,
+        platform: _selectedPlatform!,
+        productName: promptProduct,
+        tone: _selectedTone,
+        length: _selectedLength,
+        useEmoji: _useEmoji,
+        useCTA: _useCTA,
+      );
       setState(() => _results = captions);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), behavior: SnackBarBehavior.floating));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -74,6 +92,9 @@ class _AiTextScreenState extends ConsumerState<AiTextScreen> {
           expandedHeight: 180,
           floating: false, pinned: true,
           backgroundColor: AppColors.surfaceDark,
+          actions: [
+            CreditBadge(type: CreditType.caption, accentColor: const Color(0xFF3D5AFE)),
+          ],
           flexibleSpace: FlexibleSpaceBar(
             title: const Text('Buat Caption AI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
             background: Stack(fit: StackFit.expand, children: [

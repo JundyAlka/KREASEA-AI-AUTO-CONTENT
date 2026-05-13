@@ -1,114 +1,105 @@
-# 🤖 AI Content Studio UMKM
+<div align="center">
 
-![App Banner](assets/images/app_thumbnail.png)
+<img src="assets/images/kreasea_icon_original.jpg" width="100" height="100" style="border-radius: 22px" alt="Kreasea Logo"/>
 
-[![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
-[![State Management](https://img.shields.io/badge/Riverpod-774976?style=for-the-badge&logo=riverpod&logoColor=white)](https://riverpod.dev)
-[![AI](https://img.shields.io/badge/Powered%20By-Gemini%20%26%20Stability-orange?style=for-the-badge)](https://deepmind.google/technologies/gemini/)
+# Kreasea — AI Content Studio
 
-**AI Content Studio UMKM** adalah asisten cerdas berbasis AI yang dirancang khusus untuk pelaku UMKM di Indonesia. Aplikasi ini membantu mengotomatisasi pembuatan konten kreatif, mulai dari caption media sosial hingga visual produk yang memukau.
+### Platform konten bertenaga AI untuk UMKM Indonesia 🇮🇩
 
----
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
+[![Firebase](https://img.shields.io/badge/Firebase-Connected-FFCA28?logo=firebase)](https://firebase.google.com)
+[![Gemini AI](https://img.shields.io/badge/Gemini_AI-5_Keys-4285F4?logo=google)](https://aistudio.google.com)
+[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Web-success)](https://flutter.dev)
 
-## 📸 Screenshots
-
-| Dashboard Utama | AI Caption Generator |
-| :---: | :---: |
-| ![Dashboard](https://via.placeholder.com/300x600?text=Dashboard+UMKM) | ![AI Tools](https://via.placeholder.com/300x600?text=AI+Caption+Tools) |
-
-| AI Image Generator | Content Library |
-| :---: | :---: |
-| ![AI Image](https://via.placeholder.com/300x600?text=AI+Image+Generator) | ![Library](https://via.placeholder.com/300x600?text=Content+Library) |
+</div>
 
 ---
 
-## ✨ Fitur Utama
+## ✨ Tentang Kreasea
 
-- **🚀 Smart Onboarding**: Personalisasi konten berdasarkan jenis usaha, brand tone, dan target audiens.
-- **✍️ AI Caption Generator**: Menghasilkan caption kreatif untuk Instagram, TikTok, dan Facebook dalam bahasa Indonesia yang natural.
-- **🎨 AI Product Visualizer**: Membuat gambar produk profesional menggunakan integrasi **Stability AI**.
-- **📅 Content Planner**: Kelola jadwal posting media sosial secara teratur.
-- **📊 Business Analytics**: Pantau performa konten Anda langsung dari aplikasi.
+**Kreasea** adalah aplikasi AI Content Studio yang dirancang khusus untuk membantu pelaku **UMKM Indonesia** membuat konten media sosial yang menarik, profesional, dan relevan — dalam hitungan detik.
+
+Tidak perlu jadi desainer atau copywriter handal. Cukup masukkan informasi produk kamu, dan Kreasea akan menghasilkan caption, gambar, dan strategi konten yang siap diposting.
 
 ---
 
-## 🛠️ Tech Stack
+## 🚀 Fitur Unggulan
 
-- **Framework**: [Flutter](https://flutter.dev)
-- **State Management**: [Riverpod](https://riverpod.dev)
-- **Database & Auth**: [Firebase](https://firebase.google.com)
-- **AI Integration**: 
-  - Google Gemini (Text generation & Prompt refinement)
-  - Stability AI (Image generation)
-- **Animations**: [Flutter Animate](https://pub.dev/packages/flutter_animate)
+### 🤖 AI Caption Generator
+Buat 3 variasi caption sekaligus untuk setiap postingan — dengan pendekatan **Emotional**, **Informative**, dan **Storytelling**. Mendukung berbagai platform:
+- Instagram, TikTok, Facebook, Twitter/X
+- Tone yang dapat dikustomisasi (profesional, kasual, humor, inspiratif)
+- Support emoji, hashtag otomatis, dan call-to-action
 
----
+### 🎨 AI Image Generator
+Hasilkan gambar produk dan konten visual berkualitas tinggi menggunakan Stability AI SDXL. Cukup deskripsikan ide kamu dalam bahasa Indonesia — Kreasea otomatis mengubahnya menjadi prompt profesional yang dipahami AI.
 
-## 🚀 Persiapan & Instalasi
+### 📊 Analisis HPP & Harga
+Kalkulator Harga Pokok Penjualan cerdas yang memberikan rekomendasi harga jual optimal, analisis margin, dan strategi penetapan harga berdasarkan data bisnis nyata.
 
-### Prasyarat
-- Flutter SDK (Latest Stable)
-- Firebase Project
+### 📅 Jadwal Konten
+Rencanakan dan kelola jadwal posting media sosial dengan kalender konten mingguan dan bulanan. Tidak ada lagi konten yang terlupakan.
 
-### Langkah Instalasi
+### 📚 Library Konten
+Simpan semua hasil generate — caption maupun gambar — dalam satu tempat yang terorganisir. Mudah dicari, disalin, dan digunakan kembali.
 
-1. **Clone Repository**
-   ```bash
-   git clone https://github.com/username/ai_content_studio_umkm.git
-   cd ai_content_studio_umkm
-   ```
-
-2. **Install Dependencies**
-   ```bash
-   flutter pub get
-   ```
-
-3. **Konfigurasi Environment (.env)**
-   Aplikasi ini memerlukan API Key untuk layanan AI. Duplikat file `.env.example` menjadi `.env` dan masukkan API Key Anda:
-   ```bash
-   cp .env.example .env
-   ```
-   Isi file `.env`:
-   ```env
-   GEMINI_API_KEY=your_gemini_key
-   STABILITY_API_KEY=your_stability_key
-   ```
-
-4. **Setup Firebase**
-   - Tambahkan `google-services.json` (Android) atau `GoogleService-Info.plist` (iOS) ke folder yang sesuai.
-   - Pastikan Firebase Auth dan Firestore sudah aktif.
-
-5. **Jalankan Aplikasi**
-   ```bash
-   flutter run
-   ```
+### 📈 Dashboard Analitik
+Pantau performa konten dan statistik bisnis dalam satu tampilan ringkas yang mudah dipahami.
 
 ---
 
-## 📂 Struktur Folder
-```text
-lib/
-├── config/         # Konfigurasi App & Env
-├── features/       # Modul Fitur (Auth, AI, Dashboard)
-├── models/         # Data Models
-├── services/       # Integrasi API & Logic
-├── theme/          # UI Design System
-└── widgets/        # Komponen Reusable
-```
+## 💎 Sistem Kredit Harian
+
+Setiap user mendapatkan kredit harian yang otomatis diperbarui setiap tengah malam WIB:
+
+| Plan | 🖼️ Generate Gambar | ✍️ Generate Caption |
+|------|:---:|:---:|
+| **Free** | 3/hari | 5/hari |
+| **Pro** | 15/hari | 25/hari |
+| **Premium** | 50/hari | 99/hari |
 
 ---
 
-## 📝 Lisensi
-Distribusi di bawah MIT License. Lihat `LICENSE` untuk informasi lebih lanjut.
+## 🤖 Teknologi AI
+
+Kreasea menggunakan sistem **Multi-Key AI Orchestration** yang canggih:
+
+- **5 Gemini API Key** dengan rotasi otomatis — jika satu key mencapai limit, sistem langsung beralih ke key berikutnya tanpa interupsi
+- **OpenAI GPT-4o-mini** sebagai fallback — jika semua Gemini key sedang penuh
+- **Stability AI SDXL** untuk generasi gambar berkualitas tinggi
+- **Smart Prompt Engine** — prompt yang dioptimalkan khusus untuk konteks UMKM Indonesia
 
 ---
 
-## 💡 Saran Nama Repository
-Jika Anda bingung memilih nama repo, berikut rekomendasinya:
-- `AI-Content-Studio-UMKM` (Resmi/Deskriptif)
-- `WiraCipta-AI` (Khas Indonesia)
-- `Smart-UMKM-Studio` (Modern)
-- `UMKM-Content-Genie` (Unik)
+## 🎨 Desain
+
+Kreasea mengusung estetika **glassmorphism** modern dengan:
+- Dark mode sebagai tampilan utama
+- Gradient ungu-indigo yang elegan
+- Animasi halus dan transisi yang smooth
+- Layout yang responsif untuk berbagai ukuran layar Android
 
 ---
-*Dibuat untuk memajukan UMKM Indonesia di era digital.*
+
+## 🔐 Keamanan
+
+- Autentikasi Firebase (Email/Password & Google Sign-In)
+- API key tidak tersimpan di client — semua dikelola di sisi server
+- Firestore security rules memastikan setiap user hanya bisa akses data miliknya
+- Sistem kredit berbasis Firestore yang aman dari manipulasi
+
+---
+
+## 📱 Screenshot
+
+> *Tampilan aplikasi mencakup Splash Screen animatif, Dashboard UMKM, AI Caption Studio, AI Image Generator, Library, Kalender Konten, dan Pengaturan.*
+
+---
+
+<div align="center">
+
+**Dibuat dengan ❤️ untuk UMKM Indonesia**
+
+*Kreasea — Konten Terbaik, Dibuat AI, Dipercaya Bisnis Lokal*
+
+</div>

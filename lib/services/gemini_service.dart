@@ -1,14 +1,85 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../config/env.dart';
+import '../models/user_profile.dart';
+import 'multi_key_ai_manager.dart';
+import 'prompt_engine.dart';
+
+// ══════════════════════════════════════════════════════════════════
+// GEMINI SERVICE — KreaSea
+// ══════════════════════════════════════════════════════════════════
+//
+// Menggunakan MultiKeyAiManager (5 Gemini key + OpenAI fallback).
+// Semua prompt dioptimalkan melalui PromptEngine.
+// ══════════════════════════════════════════════════════════════════
 
 class GeminiService {
-  final String _apiKey = Env.geminiApiKey;
-  final String _baseUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
+  final _ai = MultiKeyAiManager();
 
+  // ── Caption Generation ─────────────────────────────────────────
+
+  /// Generate caption dengan multi-key rotation
+  Future<List<String>> generateCaptions({
+    required UserProfile userProfile,
+    required String purpose,
+    required String platform,
+    required String productName,
+    required String tone,
+    required String length,
+    bool useEmoji = true,
+    bool useCTA = true,
+  }) async {
+    final systemPrompt = PromptEngine.captionSystem(
+      businessName: userProfile.businessName.isNotEmpty
+          ? userProfile.businessName
+          : 'Bisnis UMKM',
+      businessType: userProfile.businessType.isNotEmpty
+          ? userProfile.businessType
+          : 'Umum',
+      businessDescription: userProfile.businessDescription,
+      targetAudience: userProfile.targetAudience,
+    );
+
+    final userPrompt = PromptEngine.captionUser(
+      purpose: purpose,
+      platform: platform,
+      productName: productName,
+      tone: tone,
+      length: length,
+      useEmoji: useEmoji,
+      useCTA: useCTA,
+    );
+
+    final raw = await _ai.generateText(
+      systemPrompt: systemPrompt,
+      userPrompt: userPrompt,
+      temperature: 0.85,
+      maxTokens: 2500,
+    );
+
+    // Parse 3 variasi caption
+    return _parseCaptionVariants(raw);
+  }
+
+  /// Parse hasil AI menjadi list caption
+  List<String> _parseCaptionVariants(String raw) {
+    final parts = raw.split(RegExp(r'---VARIASI \d+---', caseSensitive: false));
+    if (parts.length >= 2) {
+      return parts
+          .map((p) => p.trim())
+          .where((p) => p.isNotEmpty)
+          .take(3)
+          .toList();
+    }
+    // Fallback: split by double newline atau numbered
+    final lines = raw.split(RegExp(r'\n\n+'));
+    if (lines.length >= 2) {
+      return lines.where((l) => l.trim().isNotEmpty).take(3).toList();
+    }
+    return [raw.trim()];
+  }
+
+  // ── Image Prompt Enhancement ───────────────────────────────────
+
+  /// Enhance prompt untuk image generation — jauh lebih detail & akurat
   Future<String> enhancePrompt({
     required String originalPrompt,
     required String purpose,
@@ -17,117 +88,115 @@ class GeminiService {
     String? businessType,
     String? businessDescription,
   }) async {
-    final systemInstruction = """
-    You are an elite AI Art Director and Prompt Engineer for Stable Diffusion XL.
-    Your goal is to transform a simple user request into a PROMPT for a highly aesthetic, professional image.
-
-    **User Request**: "$originalPrompt"
-    **Context**:
-    - **Business Goal**: $purpose
-    - **Business Name**: ${businessName ?? 'Generic Brand'}
-    - **Business Type**: ${businessType ?? 'General'}
-    - **Description**: ${businessDescription ?? ''}
-    - **Target Mood**: $mood
-
-    **Critical Instructions**:
-    1.  **VISUALS FIRST**: Describe the *visual elements*, *background*, *lighting*, *textures*, and *composition*.
-    2.  **BRAND ALIGNMENT**: Ensure the image connects with the business type ($businessType). If it's a restaurant, make it appetizing. If fashion, make it stylish.
-    3.  **NO TEXT**: Do NOT ask for text to be written on the image. AI cannot write text well. Instead, describe a *clean layout* or *negative space* where text could be added later.
-    4.  **QUALITY BOOSTERS**: Always include keywords like: "masterpiece, best quality, 8k, ultra-detailed, professional photography, cinematic lighting, sharp focus, hdr".
-    5.  **STYLE ADAPTATION**:
-        - If mood is 'Minimalis': Focus on clean lines, solid colors, negative space, soft shadows.
-        - If mood is 'Playful': Use vibrant colors, soft shapes, high saturation, digital art style.
-        - If mood is 'Elegan': Use dark tones, gold accents, dramatic lighting, luxury textures, marble, silk.
-    6.  **OUTPUT**: Return ONLY the final English prompt string.
-    """;
-
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl?key=$_apiKey'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [
-            {
-              "parts": [
-                {"text": systemInstruction}
-              ]
-            }
-          ]
-        }),
+      return await _ai.generateText(
+        systemPrompt: PromptEngine.imageEnhanceSystem(
+          businessName: businessName ?? 'Generic Business',
+          businessType: businessType ?? 'General',
+          mood: mood,
+          purpose: purpose,
+          businessDescription: businessDescription,
+        ),
+        userPrompt: PromptEngine.imageEnhanceUser(originalPrompt),
+        temperature: 0.7,
+        maxTokens: 400,
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
-          final text = data['candidates'][0]['content']['parts'][0]['text'];
-          return text.trim();
-        }
-      }
-      debugPrint('Gemini Error: ${response.statusCode} - ${response.body}');
-      return "$purpose. $originalPrompt. $mood style."; // Fallback
-    } catch (e) {
-      debugPrint('Gemini Exception: $e');
-      return "$purpose. $originalPrompt. $mood style."; // Fallback
+    } catch (_) {
+      // Fallback prompt sederhana jika AI gagal
+      return '$originalPrompt. $mood style, professional photography, '
+          'masterpiece, best quality, 8k, ultra-detailed, $purpose';
     }
   }
 
-  /// Generic text generation for all AI features.
+  // ── Generic Text Generation ────────────────────────────────────
+
+  /// Generate text generik untuk fitur apapun
   Future<String> generateText({
     required String systemPrompt,
     required String userPrompt,
+    double temperature = 0.8,
+    String feature = 'caption',
   }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl?key=$_apiKey'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "system_instruction": {
-            "parts": [{"text": systemPrompt}]
-          },
-          "contents": [
-            {
-              "parts": [{"text": userPrompt}]
-            }
-          ]
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
-          return data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
-        }
-      }
-      debugPrint('Gemini Error: ${response.statusCode} - ${response.body}');
-      return 'Maaf, terjadi kesalahan saat memproses permintaan. Silakan coba lagi.';
-    } catch (e) {
-      debugPrint('Gemini Exception: $e');
-      return 'Maaf, gagal terhubung ke AI. Periksa koneksi internet dan coba lagi.';
-    }
+    return await _ai.generateText(
+      systemPrompt: systemPrompt,
+      userPrompt: userPrompt,
+      temperature: temperature,
+    );
   }
 
-  /// JSON generation — parses Gemini response as Map.
+  /// Generate JSON terstruktur
   Future<Map<String, dynamic>> generateJson({
     required String systemPrompt,
     required String userPrompt,
+    double temperature = 0.7,
+    String feature = 'caption',
   }) async {
-    final raw = await generateText(systemPrompt: systemPrompt, userPrompt: userPrompt);
-    try {
-      // Strip markdown code blocks if present
-      String cleaned = raw;
-      if (cleaned.contains('```json')) {
-        cleaned = cleaned.replaceAll('```json', '').replaceAll('```', '').trim();
-      } else if (cleaned.contains('```')) {
-        cleaned = cleaned.replaceAll('```', '').trim();
-      }
-      return jsonDecode(cleaned) as Map<String, dynamic>;
-    } catch (e) {
-      debugPrint('JSON parse error: $e');
-      return {'error': true, 'raw': raw};
-    }
+    return await _ai.generateJson(
+      systemPrompt: systemPrompt,
+      userPrompt: userPrompt,
+      temperature: temperature,
+    );
   }
+
+  // ── HPP Analysis ───────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> analyzeHPP({
+    required String productName,
+    required String businessType,
+    required Map<String, double> costs,
+    required int targetVolume,
+    String? competitorPrice,
+  }) async {
+    return await _ai.generateJson(
+      systemPrompt: PromptEngine.hppSystem(businessType),
+      userPrompt: PromptEngine.hppUser(
+        productName: productName,
+        costs: costs,
+        targetVolume: targetVolume,
+        competitorPrice: competitorPrice,
+      ),
+      temperature: 0.3, // lebih deterministik untuk kalkulasi
+    );
+  }
+
+  // ── Hashtag Research ───────────────────────────────────────────
+
+  Future<Map<String, dynamic>> generateHashtags({
+    required String productTopic,
+    required String platform,
+    required String businessType,
+  }) async {
+    return await _ai.generateJson(
+      systemPrompt: PromptEngine.hashtagSystem(platform),
+      userPrompt: PromptEngine.hashtagUser(
+        productTopic: productTopic,
+        platform: platform,
+        businessType: businessType,
+      ),
+      temperature: 0.6,
+    );
+  }
+
+  // ── Content Calendar ───────────────────────────────────────────
+
+  Future<String> generateContentCalendar({
+    required String businessName,
+    required String businessType,
+    required String month,
+    required List<String> platforms,
+  }) async {
+    return await _ai.generateText(
+      systemPrompt: PromptEngine.contentCalendarSystem(businessName, businessType),
+      userPrompt: 'Buat content calendar untuk bulan $month. '
+          'Platform: ${platforms.join(', ')}. '
+          'Format yang rapi dan mudah dieksekusi tim kecil.',
+      temperature: 0.7,
+      maxTokens: 3000,
+    );
+  }
+
+  // ── Diagnostik key status ──────────────────────────────────────
+  Map<String, String> get keyStatus => _ai.keyStatus;
 }
 
-final geminiServiceProvider = Provider<GeminiService>((ref) {
-  return GeminiService();
-});
+final geminiServiceProvider = Provider<GeminiService>((ref) => GeminiService());

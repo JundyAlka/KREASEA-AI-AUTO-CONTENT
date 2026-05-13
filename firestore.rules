@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ══════════════════════════════════════════════
+    // USER CREDITS — auto-refresh harian
+    // ══════════════════════════════════════════════
+    match /user_credits/{userId} {
+      // User hanya bisa baca/tulis credit milik sendiri
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ══════════════════════════════════════════════
+    // USER QUOTAS (legacy rate-limit dari backend)
+    // ══════════════════════════════════════════════
+    match /user_quotas/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Write hanya dari backend (service account)
+      allow write: if false;
+    }
+
+    // ══════════════════════════════════════════════
+    // USER PROFILES
+    // ══════════════════════════════════════════════
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ══════════════════════════════════════════════
+    // CONTENT LIBRARY
+    // ══════════════════════════════════════════════
+    match /content/{contentId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == resource.data.uid;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.uid;
+    }
+  }
+}

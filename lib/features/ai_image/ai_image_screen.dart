@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/stability_ai_service.dart';
 import '../../services/gemini_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/credit_service.dart';
 import '../../models/user_profile.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_container.dart';
 import '../../widgets/glass_form_field.dart';
 import '../../widgets/ai_result_card.dart';
+import '../../widgets/credit_widgets.dart';
 
 class AiImageScreen extends ConsumerStatefulWidget {
   const AiImageScreen({super.key});
@@ -35,16 +37,14 @@ class _AiImageScreenState extends ConsumerState<AiImageScreen> {
   bool _isLoading = false;
   String _loadingMessage = '';
   String? _resultImageBase64;
-  double _creditBalance = 0.0;
 
   @override
-  void initState() { super.initState(); _fetchBalance(); }
-
-  Future<void> _fetchBalance() async {
-    try {
-      final balance = await ref.read(stabilityAiServiceProvider).getBalance();
-      if (mounted) setState(() => _creditBalance = balance);
-    } catch (e) { debugPrint('Failed to load credits: $e'); }
+  void initState() {
+    super.initState();
+    // Inisialisasi credit saat screen dibuka
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(creditServiceProvider).fetchCredits();
+    });
   }
 
   Future<void> _generate() async {
@@ -52,11 +52,16 @@ class _AiImageScreenState extends ConsumerState<AiImageScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jelaskan desain yang kamu inginkan'), behavior: SnackBarBehavior.floating));
       return;
     }
-    if (_creditBalance < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Credit tidak mencukupi (Butuh min. 2 credit)'), behavior: SnackBarBehavior.floating));
-      return;
-    }
+
+    // ── Cek & kurangi credit image ─────────────────────────
+    final canProceed = await showCreditGuard(context, CreditType.image, ref);
+    if (!canProceed || !mounted) return;
+
     setState(() { _isLoading = true; _loadingMessage = 'Meracik prompt ajaib dengan Gemini AI... ✨'; _resultImageBase64 = null; });
+
+    // Kurangi credit SEBELUM generate (agar tidak abuse)
+    await ref.read(creditServiceProvider).useCredit(CreditType.image);
+
     try {
       final authState = ref.read(authStateProvider);
       final profile = authState.asData?.value ?? UserProfile(uid: 'guest', email: '', businessName: 'UMKM Demo', businessType: 'Umum');
@@ -79,9 +84,9 @@ class _AiImageScreenState extends ConsumerState<AiImageScreen> {
       final service = ref.read(stabilityAiServiceProvider);
       final base64Image = await service.generateImage(prompt: enhancedPrompt, aspectRatio: aspectRatio, stylePreset: _selectedMood);
       setState(() => _resultImageBase64 = base64Image);
-      _fetchBalance();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      // Refund credit jika generate gagal
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), behavior: SnackBarBehavior.floating));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -97,16 +102,7 @@ class _AiImageScreenState extends ConsumerState<AiImageScreen> {
           expandedHeight: 180, floating: false, pinned: true,
           backgroundColor: AppColors.surfaceDark,
           actions: [
-            Container(
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: Colors.black.withOpacity(0.5), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white12)),
-              child: Row(children: [
-                const Icon(Icons.bolt_rounded, color: Colors.amber, size: 16),
-                const SizedBox(width: 4),
-                Text('Credits: ${_creditBalance.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
-              ]),
-            ),
+            CreditBadge(type: CreditType.image, accentColor: const Color(0xFFE91E63)),
           ],
           flexibleSpace: FlexibleSpaceBar(
             title: const Text('Studio Desain AI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),

@@ -1,0 +1,34 @@
+{
+  "name": "kreasea-backend",
+  "version": "1.0.0",
+  "description": "KreaSea AI Content Studio — Secure Backend with Multi-API Key Orchestrator",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "nodemon src/app.js",
+    "start": "node src/app.js",
+    "test": "jest --runInBand",
+    "test:orchestrator": "jest src/__tests__/orchestrator.test.js",
+    "test:fallback": "jest src/__tests__/fallback.test.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/helmet": "^11.1.1",
+    "@fastify/multipart": "^8.3.0",
+    "@fastify/rate-limit": "^9.1.0",
+    "@google-cloud/firestore": "^7.9.0",
+    "fastify": "^4.28.1",
+    "firebase-admin": "^12.2.0",
+    "ioredis": "^5.4.1",
+    "joi": "^17.13.3",
+    "node-fetch": "^3.3.2",
+    "pino-pretty": "^11.2.1",
+    "sharp": "^0.33.4"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
