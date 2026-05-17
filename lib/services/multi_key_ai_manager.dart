@@ -27,12 +27,16 @@ class MultiKeyAiManager {
     debugPrint('[AI] MultiKeyAiManager v3 initialized (REST mode)');
   }
 
-  // ── Model priority list ──────────────────────────────────────
+  // ── Model priority list (verified working 2026-05-17) ───────
+  // gemini-2.0-flash = limit:0 free tier (tidak bisa dipakai)
+  // gemini-2.5-flash = ✅ WORKS (free tier available)
   static const List<String> _models = [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-8b',
+    'gemini-2.5-flash',        // ✅ Primary - bekerja di free tier
+    'gemini-2.5-flash-lite',   // ✅ Lighter version
+    'gemini-flash-latest',     // ✅ Latest flash alias
+    'gemini-flash-lite-latest',// ✅ Flash lite alias
+    'gemini-2.0-flash-lite',   // Fallback
+    'gemini-2.0-flash',        // Last resort (limit:0 saat ini)
   ];
 
   static const String _baseUrl =
