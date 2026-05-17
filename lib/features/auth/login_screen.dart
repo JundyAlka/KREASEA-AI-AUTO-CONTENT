@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,19 +38,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _emailController.text.trim(), _passwordController.text);
       if (mounted) context.go('/dashboard');
     } on FirebaseAuthException catch (e) {
-      String msg = 'Terjadi kesalahan saat login';
-      if (e.code == 'user-not-found' ||
-          e.code == 'invalid-credential' ||
-          e.code == 'wrong-password') {
-        msg = 'Email atau password salah';
-      } else if (e.code == 'invalid-email') {
-        msg = 'Format email tidak valid';
-      } else {
-        msg = e.message ?? msg;
+      String msg;
+      switch (e.code) {
+        case 'user-not-found':
+        case 'wrong-password':
+        case 'invalid-credential':
+          msg = 'Email atau password salah. Periksa kembali.';
+          break;
+        case 'invalid-email':
+          msg = 'Format email tidak valid.';
+          break;
+        case 'user-disabled':
+          msg = 'Akun ini telah dinonaktifkan. Hubungi dukungan.';
+          break;
+        case 'too-many-requests':
+          msg = 'Terlalu banyak percobaan. Tunggu beberapa menit.';
+          break;
+        case 'network-request-failed':
+          msg = 'Tidak ada koneksi internet. Periksa jaringanmu.';
+          break;
+        default:
+          msg = e.message ?? 'Terjadi kesalahan saat login.';
       }
       if (mounted) _showError(msg);
     } catch (e) {
-      if (mounted) _showError('Error: $e');
+      if (mounted) _showError('Terjadi kesalahan. Coba lagi.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -61,8 +74,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final authService = ref.read(authServiceProvider);
       await authService.signInWithGoogle();
       if (mounted) context.go('/dashboard');
+    } on FirebaseAuthException catch (e) {
+      if (mounted) _showError(e.message ?? 'Gagal login dengan Google.');
     } catch (e) {
-      if (mounted) _showError('Gagal login dengan Google: $e');
+      final msg = e.toString();
+      // User cancel — jangan tampilkan error
+      if (msg.contains('popup-closed') ||
+          msg.contains('cancelled') ||
+          msg.contains('AbortError') ||
+          msg.contains('sign_in_canceled')) {
+        return;
+      }
+      if (mounted) _showError(msg.replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -71,14 +94,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white, size: 18),
-            const SizedBox(width: 10),
-            Expanded(child: Text(msg)),
-          ],
-        ),
+        content: Row(children: [
+          const Icon(Icons.error_outline, color: Colors.white, size: 18),
+          const SizedBox(width: 10),
+          Expanded(child: Text(msg, style: const TextStyle(fontSize: 13))),
+        ]),
         backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 5),
       ),
     );
   }
@@ -93,7 +118,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
       body: Stack(
         children: [
-          // ── Decorative background blobs ────────────────────────────────────
+          // ── Decorative background blobs ──────────────────────────────
           Positioned(
             top: -60,
             right: -60,
@@ -111,7 +136,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
 
-          // ── Content ────────────────────────────────────────────────────────
+          // ── Content ──────────────────────────────────────────────────
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -175,11 +200,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                       Text(
                         'Kreasea — AI Content Studio',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                ),
                         textAlign: TextAlign.center,
                       )
                           .animate()
@@ -187,7 +213,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                       const SizedBox(height: 40),
 
-                      // ── Email ────────────────────────────────────────────
+                      // ── Email ──────────────────────────────────────────
                       TextFormField(
                         controller: _emailController,
                         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -213,7 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                       const SizedBox(height: 16),
 
-                      // ── Password ─────────────────────────────────────────
+                      // ── Password ──────────────────────────────────────
                       TextFormField(
                         controller: _passwordController,
                         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -250,14 +276,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () {},
-                          child: const Text('Lupa Password?'),
+                          onPressed: () => context.go('/forgot-password'),
+                          child: const Text(
+                            'Lupa Password?',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
                       ).animate().fadeIn(delay: 450.ms),
 
                       const SizedBox(height: 8),
 
-                      // ── Login Button ──────────────────────────────────────
+                      // ── Login Button ───────────────────────────────────
                       _GradientButton(
                         label: 'Masuk',
                         isLoading: _isLoading,
@@ -329,7 +362,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                       const SizedBox(height: 20),
 
-                      // ── Google Sign-In ────────────────────────────────────
+                      // ── Google Sign-In — bekerja di web & Android ──────
                       _GoogleButton(
                         isLoading: _isLoading,
                         onPressed: _isLoading ? null : _loginWithGoogle,
@@ -367,7 +400,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
-// ─── Helper Widgets ────────────────────────────────────────────────────────────
+// ─── Helper Widgets ───────────────────────────────────────────────────────────
 
 class _Blob extends StatelessWidget {
   final double size;
@@ -411,9 +444,7 @@ class _GradientButton extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         height: 56,
         decoration: BoxDecoration(
-          gradient: onPressed == null
-              ? null
-              : AppColors.primaryGradient,
+          gradient: onPressed == null ? null : AppColors.primaryGradient,
           color: onPressed == null ? Colors.grey.shade400 : null,
           borderRadius: BorderRadius.circular(16),
           boxShadow: onPressed == null
@@ -465,7 +496,8 @@ class _GoogleButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onPressed,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         height: 56,
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E35) : Colors.white,
@@ -482,37 +514,50 @@ class _GoogleButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Google G icon substitute using colored circles
-            Container(
-              width: 22,
-              height: 22,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Color(0xFF4285F4), Color(0xFF34A853)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+        child: isLoading
+            ? const Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
                 ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Google "G" logo colours
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: const BoxDecoration(shape: BoxShape.circle),
+                    child: Center(
+                      child: Text(
+                        'G',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          foreground: Paint()
+                            ..shader = const LinearGradient(
+                              colors: [Color(0xFF4285F4), Color(0xFF34A853)],
+                            ).createShader(
+                                const Rect.fromLTWH(0, 0, 24, 24)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Masuk dengan Google',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight,
+                    ),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.g_mobiledata,
-                  color: Colors.white, size: 18),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              'Masuk dengan Google',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 15,
-                color: isDark
-                    ? AppColors.textPrimaryDark
-                    : AppColors.textPrimaryLight,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

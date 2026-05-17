@@ -1,16 +1,30 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/content_item.dart';
 import '../../repositories/content_repository.dart';
+import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_container.dart';
 
-// Controller/Provider
-final contentStreamProvider = StreamProvider.autoDispose<List<ContentItem>>((ref) {
+// Provider menggunakan UID real dari auth state
+final userContentStreamProvider = StreamProvider.autoDispose<List<ContentItem>>((ref) {
   final repo = ref.watch(contentRepositoryProvider);
-  return repo.watchContent('demo-user');
+  final authAsync = ref.watch(authStateProvider);
+
+  return authAsync.when(
+    data: (profile) {
+      final uid = profile?.uid;
+      if (uid == null || uid.isEmpty || uid == 'guest') {
+        // Guest: kembalikan stream kosong
+        return Stream.value(<ContentItem>[]);
+      }
+      return repo.watchContent(uid);
+    },
+    loading: () => Stream.value(<ContentItem>[]),
+    error: (_, __) => Stream.value(<ContentItem>[]),
+  );
 });
 
 class LibraryScreen extends ConsumerStatefulWidget {
@@ -23,14 +37,13 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   String _searchQuery = '';
   String _selectedFilter = 'Semua';
-  final _filters = ['Semua', 'Instagram', 'TikTok', 'Draft', 'Favorit'];
+  final _filters = ['Semua', 'Instagram', 'TikTok', 'Facebook', 'Caption', 'Gambar'];
 
   @override
   Widget build(BuildContext context) {
-    final mock = GoRouterState.of(context).uri.queryParameters['mock'] == 'true';
-    final contentAsync = mock
-        ? AsyncValue.data(List.generate(5, (i) => ContentItem.demo(i.toString())))
-        : ref.watch(contentStreamProvider);
+    final contentAsync = ref.watch(userContentStreamProvider);
+    final authAsync = ref.watch(authStateProvider);
+    final isGuest = authAsync.valueOrNull?.uid == 'guest' || authAsync.valueOrNull == null;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -39,7 +52,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           // Gradient Header
           const GlassGradientHeader(
             title: 'Library Konten',
-            subtitle: 'Kelola semua konten yang pernah kamu buat',
+            subtitle: 'Semua konten yang pernah kamu buat',
             icon: Icons.folder_rounded,
           ),
 
@@ -48,7 +61,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Column(
               children: [
-                // Glass Search Bar
+                // Search Bar
                 GlassContainer(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: TextField(
@@ -113,42 +126,165 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
           // Content List
           Expanded(
-            child: contentAsync.when(
-              data: (items) {
-                final filteredItems = items.where((item) {
-                  final matchesSearch = item.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                      item.body.toLowerCase().contains(_searchQuery.toLowerCase());
-                  final matchesFilter = _selectedFilter == 'Semua' ||
-                      item.platform.name.contains(_selectedFilter) ||
-                      (_selectedFilter == 'Draft' && false);
-                  return matchesSearch && matchesFilter;
-                }).toList();
-
-                if (filteredItems.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.inbox_rounded, size: 64, color: Colors.white.withOpacity(0.2)),
-                        const SizedBox(height: 16),
-                        const Text('Tidak ada konten ditemukan', style: TextStyle(color: Colors.white38)),
-                      ],
+            child: isGuest
+                ? _buildGuestState(context)
+                : contentAsync.when(
+                    data: (items) {
+                      final filtered = _filterItems(items);
+                      if (filtered.isEmpty && items.isEmpty) {
+                        return _buildEmptyState();
+                      }
+                      if (filtered.isEmpty) {
+                        return _buildNoResultState();
+                      }
+                      return ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          return _GlassContentCard(item: filtered[index])
+                              .animate(delay: (index * 50).ms)
+                              .fadeIn(duration: 300.ms)
+                              .slideY(begin: 0.1, end: 0);
+                        },
+                      );
+                    },
+                    error: (e, _) => _buildErrorState(e.toString()),
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(color: AppColors.accentLight),
                     ),
-                  );
-                }
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-                  itemCount: filteredItems.length,
-                  itemBuilder: (context, index) {
-                    return _GlassContentCard(item: filteredItems[index]);
-                  },
-                );
-              },
-              error: (e, st) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
-              loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accentLight)),
+  List<ContentItem> _filterItems(List<ContentItem> items) {
+    return items.where((item) {
+      final matchesSearch = _searchQuery.isEmpty ||
+          item.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          item.body.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesFilter = _selectedFilter == 'Semua' ||
+          item.platform.name.toLowerCase().contains(_selectedFilter.toLowerCase());
+      return matchesSearch && matchesFilter;
+    }).toList();
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: AppColors.grad1.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Icon(Icons.folder_open_rounded, size: 50, color: AppColors.grad1.withOpacity(0.5)),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Library masih kosong',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Konten yang kamu generate akan\notomatis tersimpan di sini',
+            style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14, height: 1.5),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          GestureDetector(
+            onTap: () => context.go('/dashboard'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [AppColors.grad1, AppColors.grad2]),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Text(
+                '✨ Buat Konten Pertama',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
+        ],
+      ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1)),
+    );
+  }
+
+  Widget _buildNoResultState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.search_off_rounded, size: 60, color: Colors.white.withOpacity(0.2)),
+          const SizedBox(height: 16),
+          const Text('Tidak ada konten ditemukan', style: TextStyle(color: Colors.white38, fontSize: 15)),
+          const SizedBox(height: 8),
+          Text('Coba kata kunci lain', style: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGuestState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: Colors.amber.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: const Icon(Icons.lock_rounded, size: 48, color: Colors.amber),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Login untuk melihat Library',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Masuk dengan akunmu untuk menyimpan\ndan mengelola semua konten AI',
+            style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14, height: 1.5),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          GestureDetector(
+            onTap: () => context.go('/login'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [AppColors.grad1, AppColors.grad2]),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Text(
+                '🔐 Masuk Sekarang',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ).animate().fadeIn(duration: 400.ms),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.red.withOpacity(0.5)),
+          const SizedBox(height: 12),
+          const Text('Gagal memuat konten', style: TextStyle(color: Colors.white54)),
+          const SizedBox(height: 4),
+          Text(error, style: const TextStyle(color: Colors.white24, fontSize: 11)),
         ],
       ),
     );
@@ -162,13 +298,21 @@ class _GlassContentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color tagColor = AppColors.grad1;
-    IconData icon = Icons.article;
-    if (item.platform.name.toLowerCase().contains('instagram')) {
+    IconData icon = Icons.article_rounded;
+
+    final platformName = item.platform.name.toLowerCase();
+    if (platformName.contains('instagram')) {
       tagColor = const Color(0xFFE1306C);
-      icon = Icons.camera_alt;
-    } else if (item.platform.name.toLowerCase().contains('tiktok')) {
+      icon = Icons.camera_alt_rounded;
+    } else if (platformName.contains('tiktok')) {
       tagColor = const Color(0xFF69C9D0);
-      icon = Icons.music_note;
+      icon = Icons.music_note_rounded;
+    } else if (platformName.contains('facebook')) {
+      tagColor = const Color(0xFF1877F2);
+      icon = Icons.facebook_rounded;
+    } else if (platformName.contains('gambar') || platformName.contains('image')) {
+      tagColor = const Color(0xFF9C27B0);
+      icon = Icons.image_rounded;
     }
 
     return Padding(
@@ -208,7 +352,7 @@ class _GlassContentCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         item.body,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12, color: Colors.white38),
                       ),

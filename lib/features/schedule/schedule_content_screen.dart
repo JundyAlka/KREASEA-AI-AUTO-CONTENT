@@ -118,15 +118,13 @@ class _ScheduleContentScreenState extends ConsumerState<ScheduleContentScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Upcoming Schedules (Mock)
+                  // Upcoming Schedules — real data atau empty state
                   const Text(
                     'Jadwal Mendatang',
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   const SizedBox(height: 12),
-                  _buildUpcomingItem('Promo Spesial Ayam Geprek', 'Instagram • Besok 10:00', Icons.camera_alt, const Color(0xFFE1306C)),
-                  _buildUpcomingItem('Flash Sale Weekend', 'TikTok • Sabtu 19:00', Icons.music_note, const Color(0xFF69C9D0)),
-                  _buildUpcomingItem('Menu Baru Announcement', 'WhatsApp • Senin 08:00', Icons.chat, const Color(0xFF25D366)),
+                  _buildEmptySchedule(),
                 ],
               ),
             ),
@@ -136,47 +134,26 @@ class _ScheduleContentScreenState extends ConsumerState<ScheduleContentScreen> {
     );
   }
 
-  Widget _buildUpcomingItem(String title, String subtitle, IconData icon, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: GlassContainer(
-        padding: const EdgeInsets.all(14),
-        child: Row(
+  Widget _buildEmptySchedule() {
+    return GlassContainer(
+      padding: const EdgeInsets.all(28),
+      child: Center(
+        child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
-                  const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 12)),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.warning.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Text('Menunggu', style: TextStyle(color: AppColors.warning, fontSize: 10, fontWeight: FontWeight.bold)),
-            ),
+            Icon(Icons.event_busy_rounded, size: 48, color: Colors.white.withOpacity(0.15)),
+            const SizedBox(height: 12),
+            const Text('Belum ada jadwal', style: TextStyle(color: Colors.white38, fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 4),
+            Text('Atur jadwal posting kontenmu di form di atas', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 12)),
           ],
         ),
       ),
     );
   }
+
 
   Widget _buildScheduleForm() {
+
     return GlassContainer(
       padding: const EdgeInsets.all(20),
       child: Column(

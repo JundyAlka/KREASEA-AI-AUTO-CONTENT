@@ -11,11 +11,13 @@ import '../../models/content_item.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_container.dart';
 import '../../widgets/credit_widgets.dart';
+import '../../widgets/premium_modal.dart';
 import './widgets/analytics_section.dart';
 import './dashboard_providers.dart';
 import '../../services/feature_menu_service.dart';
 import '../../services/credit_service.dart';
 import '../../models/feature_menu_item.dart';
+import '../../main.dart' show appVersion, isBetaVersion;
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -45,6 +47,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _bannerTimer?.cancel();
     _bannerController.dispose();
     super.dispose();
+  }
+
+  // ── Time-based greeting ──────────────────────────────────────────
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 11) return 'Selamat pagi';
+    if (hour < 15) return 'Selamat siang';
+    if (hour < 18) return 'Selamat sore';
+    return 'Selamat malam';
   }
 
   @override
@@ -142,70 +153,230 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  AppBar _buildAppBar(UserProfile profile, bool isDark) {
-    return AppBar(
-      titleSpacing: 16,
-      title: Row(children: [
-        Container(
-          width: 42, height: 42,
-          decoration: BoxDecoration(gradient: AppColors.primaryGradient, borderRadius: BorderRadius.circular(13),
-            boxShadow: [BoxShadow(color: AppColors.grad2.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]),
-          child: Center(child: Text(profile.businessName.isNotEmpty ? profile.businessName[0].toUpperCase() : 'U',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18))),
+  PreferredSizeWidget _buildAppBar(UserProfile profile, bool isDark) {
+    final displayName = profile.businessName.isNotEmpty
+        ? profile.businessName
+        : (profile.email.isNotEmpty ? profile.email.split('@').first : 'Pengguna');
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+    final greeting = _getGreeting();
+
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(80),
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF0F0F1A).withOpacity(0.88),
+                  const Color(0xFF1A1A2E).withOpacity(0.80),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.white.withOpacity(0.08),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    // ── Avatar dengan gradient + glow ──────────────────
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.grad2.withOpacity(0.45),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                          BoxShadow(
+                            color: AppColors.grad1.withOpacity(0.2),
+                            blurRadius: 24,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 20,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+
+                    // ── Greeting + Nama + Badges ───────────────────────
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Greeting row
+                          Row(
+                            children: [
+                              Text(
+                                greeting,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white.withOpacity(0.45),
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Text('👋', style: TextStyle(fontSize: 11)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          // Nama bisnis — full, tidak terpotong
+                          Text(
+                            displayName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: -0.3,
+                              height: 1.1,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          // Sub-row: tipe bisnis + credit
+                          Row(
+                            children: [
+                              if (profile.businessType.isNotEmpty) ...[
+                                _GlassBadge(
+                                  label: profile.businessType,
+                                  color: AppColors.accentLight,
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Consumer(builder: (ctx, ref, _) {
+                                final creditsAsync = ref.watch(userCreditsProvider);
+                                return creditsAsync.when(
+                                  data: (credits) => Row(children: [
+                                    _MiniCreditChip(
+                                      emoji: '🖼️',
+                                      count: credits.imageCredits,
+                                      max: credits.imageCreditMax,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    _MiniCreditChip(
+                                      emoji: '✍️',
+                                      count: credits.captionCredits,
+                                      max: credits.captionCreditMax,
+                                    ),
+                                  ]),
+                                  loading: () => Container(
+                                    width: 60, height: 14,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.07),
+                                      borderRadius: BorderRadius.circular(7),
+                                    ),
+                                  ),
+                                  error: (_, __) => const SizedBox.shrink(),
+                                );
+                              }),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // ── Action Buttons ─────────────────────────────────
+                    // BETA badge
+                    if (isBetaVersion) ...[
+                      _GlassActionButton(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF7C4DFF), Color(0xFFE040FB)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'BETA',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                        ),
+                        onTap: null,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    _GlassActionButton(
+                      icon: Icons.notifications_outlined,
+                      onTap: () => _showNotificationPopup(context),
+                    ),
+                    const SizedBox(width: 6),
+                    _GlassActionButton(
+                      icon: Icons.diamond_outlined,
+                      iconColor: Colors.amber,
+                      bgColor: Colors.amber.withOpacity(0.12),
+                      onTap: () => _showPremiumModal(context),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
-        const SizedBox(width: 12),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Halo, ${profile.businessName} 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          // ── Credit mini bar ────────────────────────────
-          Consumer(builder: (ctx, ref, _) {
-            final creditsAsync = ref.watch(userCreditsProvider);
-            return creditsAsync.when(
-              data: (credits) => Row(children: [
-                const Icon(Icons.bolt_rounded, size: 10, color: Colors.amber),
-                const SizedBox(width: 2),
-                Text('🖼️ ${credits.imageCredits}', style: const TextStyle(fontSize: 10, color: Colors.white54)),
-                const SizedBox(width: 6),
-                Text('✍️ ${credits.captionCredits}', style: const TextStyle(fontSize: 10, color: Colors.white54)),
-                const SizedBox(width: 4),
-                Text('/ hari', style: const TextStyle(fontSize: 9, color: Colors.white24)),
-              ]),
-              loading: () => const Text('...', style: TextStyle(fontSize: 10, color: Colors.white24)),
-              error: (_, __) => const SizedBox.shrink(),
-            );
-          }),
-        ]),
-      ]),
-      actions: [
-        IconButton(
-          icon: Stack(children: [
-            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.notifications_outlined, size: 20)),
-            Positioned(top: 4, right: 4, child: Container(width: 8, height: 8, decoration: BoxDecoration(color: AppColors.error, shape: BoxShape.circle, border: Border.all(color: AppColors.surfaceDark, width: 1.5)))),
-          ]),
-          onPressed: () => _showNotificationPopup(context),
-        ),
-        Padding(padding: const EdgeInsets.only(right: 8), child: IconButton(
-          icon: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.amber.withOpacity(0.12), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.diamond_outlined, color: Colors.amber, size: 20)),
-          onPressed: () => _showPremiumModal(context),
-        )),
-      ],
+      ),
     );
   }
 
+
+
   IconData _getCategoryIcon(String type) {
-    switch (type) { case 'Makanan & Minuman': return Icons.restaurant; case 'Fashion': return Icons.checkroom; default: return Icons.store; }
+    switch (type) {
+      case 'Makanan & Minuman': return Icons.restaurant_rounded;
+      case 'Kafe & Coffee Shop': return Icons.coffee_rounded;
+      case 'Bakery & Roti': return Icons.bakery_dining_rounded;
+      case 'Katering & Snack': return Icons.set_meal_rounded;
+      case 'Fashion & Pakaian': return Icons.checkroom_rounded;
+      case 'Aksesori & Perhiasan': return Icons.diamond_rounded;
+      case 'Kecantikan & Skincare': return Icons.face_retouching_natural_rounded;
+      case 'Salon & Barbershop': return Icons.content_cut_rounded;
+      case 'Kesehatan & Apotek': return Icons.local_pharmacy_rounded;
+      case 'Olahraga & Fitness': return Icons.fitness_center_rounded;
+      case 'Elektronik & Gadget': return Icons.devices_rounded;
+      case 'Furnitur & Interior': return Icons.chair_rounded;
+      case 'Properti & Kontrakan': return Icons.home_work_rounded;
+      case 'Jasa & Layanan': return Icons.handyman_rounded;
+      case 'Pendidikan & Kursus': return Icons.school_rounded;
+      case 'Otomotif & Bengkel': return Icons.car_repair_rounded;
+      case 'Pertanian & Agribisnis': return Icons.agriculture_rounded;
+      case 'Toko Online / Reseller': return Icons.shopping_bag_rounded;
+      default: return Icons.store_rounded;
+    }
   }
 
-  // ── NOTIFICATION POPUP ──
+  // ── NOTIFICATION POPUP — kosong, tidak ada dummy ──
   void _showNotificationPopup(BuildContext context) {
-    final notifications = [
-      _NotifItem(icon: Icons.auto_awesome_rounded, color: const Color(0xFF7C4DFF), title: 'Caption berhasil dibuat!', subtitle: 'Caption "Promo Ramadhan" siap digunakan', time: '2 menit lalu', isNew: true),
-      _NotifItem(icon: Icons.schedule_rounded, color: const Color(0xFF00B4DB), title: 'Post dijadwalkan', subtitle: 'Instagram Feed — Besok, 19:00 WIB', time: '15 menit lalu', isNew: true),
-      _NotifItem(icon: Icons.trending_up_rounded, color: const Color(0xFF38EF7D), title: 'Engagement naik +23%', subtitle: 'Konten minggu ini perform lebih baik!', time: '1 jam lalu', isNew: true),
-      _NotifItem(icon: Icons.palette_rounded, color: const Color(0xFFE91E63), title: 'Desain siap diunduh', subtitle: 'Banner "Flash Sale" sudah selesai', time: '3 jam lalu', isNew: false),
-      _NotifItem(icon: Icons.star_rounded, color: Colors.amber, title: 'Fitur Baru: Testimoni Generator', subtitle: 'Buat template request review otomatis', time: 'Kemarin', isNew: false),
-      _NotifItem(icon: Icons.card_giftcard_rounded, color: const Color(0xFFE040FB), title: 'Promo: Upgrade ke Pro 50% OFF', subtitle: 'Berlaku hingga 31 Mei 2026', time: '2 hari lalu', isNew: false),
-    ];
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -216,55 +387,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            height: MediaQuery.of(context).size.height * 0.58,
+            height: MediaQuery.of(context).size.height * 0.45,
             decoration: BoxDecoration(
               color: AppColors.surfaceDark.withOpacity(0.97),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
               border: Border.all(color: Colors.white.withOpacity(0.1)),
             ),
             child: Column(children: [
-              // Handle bar
-              Container(margin: const EdgeInsets.only(top: 10), width: 36, height: 4, decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(2))),
-              // Header
+              Container(margin: const EdgeInsets.only(top: 10), width: 36, height: 4,
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(2))),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
                 child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                   const Text('Notifikasi', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
-                  GestureDetector(
-                    onTap: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Semua notifikasi ditandai sudah dibaca'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1))); },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(color: AppColors.accentLight.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-                      child: const Text('Tandai Dibaca', style: TextStyle(color: AppColors.accentLight, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
+                  Text('0 baru', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12)),
                 ]),
               ),
               Divider(color: Colors.white.withOpacity(0.06), height: 1),
-              // List
-              Expanded(child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                itemCount: notifications.length,
-                separatorBuilder: (_, __) => Divider(color: Colors.white.withOpacity(0.04), height: 1),
-                itemBuilder: (_, i) {
-                  final n = notifications[i];
-                  return ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: n.color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-                      child: Icon(n.icon, color: n.color, size: 17),
-                    ),
-                    title: Row(children: [
-                      Expanded(child: Text(n.title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: n.isNew ? Colors.white : Colors.white60))),
-                      if (n.isNew) Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppColors.accentLight, shape: BoxShape.circle)),
-                    ]),
-                    subtitle: Text('${n.subtitle} · ${n.time}', style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.3)), overflow: TextOverflow.ellipsis),
-                    onTap: () => Navigator.pop(ctx),
-                  );
-                },
-              )),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.notifications_none_rounded, size: 60, color: Colors.white.withOpacity(0.12)),
+                      const SizedBox(height: 12),
+                      const Text('Belum ada notifikasi', style: TextStyle(color: Colors.white38, fontSize: 15)),
+                      const SizedBox(height: 4),
+                      Text('Aktivitas kamu akan muncul di sini', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
             ]),
           ),
         ),
@@ -273,103 +426,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   // ── PREMIUM MODAL ──
-  void _showPremiumModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.75,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceDark.withOpacity(0.97),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-              border: Border.all(color: Colors.white.withOpacity(0.1)),
-            ),
-            child: Column(children: [
-              // ── Hero header (compact) ──
-              Container(
-                height: 110, width: double.infinity,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [Color(0xFF7C4DFF), Color(0xFFE040FB)]),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                ),
-                child: Stack(children: [
-                  Positioned(right: -10, top: -10, child: Icon(Icons.diamond_rounded, size: 90, color: Colors.white.withOpacity(0.1))),
-                  Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 16), child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('PRO PLAN', style: TextStyle(color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 10)),
-                      const SizedBox(height: 2),
-                      const Text('Unlimited Power.', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-                    ],
-                  )),
-                  Positioned(top: 8, right: 8, child: IconButton(icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 18), onPressed: () => Navigator.pop(ctx))),
-                ]),
-              ),
-              // ── Benefits (non-scrollable) ──
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                  child: Column(mainAxisAlignment: MainAxisAlignment.start, children: [
-                    _premiumBenefit(Icons.bolt_rounded, 'Unlimited AI', 'Buat konten tanpa batas harian', AppColors.warning),
-                    const SizedBox(height: 12),
-                    _premiumBenefit(Icons.speed_rounded, 'Fast Processing', 'Prioritas antrian server', AppColors.info),
-                    const SizedBox(height: 12),
-                    _premiumBenefit(Icons.hd_rounded, 'HD Image Downloads', 'Resolusi gambar 4K untuk cetak', AppColors.success),
-                    const SizedBox(height: 12),
-                    _premiumBenefit(Icons.auto_fix_high_rounded, 'Remove Watermarks', 'Hapus watermark otomatis', AppColors.accent),
-                    const SizedBox(height: 12),
-                    _premiumBenefit(Icons.calendar_month_rounded, 'Content Calendar', 'Jadwal konten AI 30 hari', const Color(0xFFF59E0B)),
-                    const SizedBox(height: 12),
-                    _premiumBenefit(Icons.analytics_rounded, 'Advanced Analytics', 'Laporan performa mendalam', const Color(0xFF00B4DB)),
-                  ]),
-                ),
-              ),
-              // ── CTA pinned at bottom ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                child: Column(children: [
-                  Container(
-                    width: double.infinity, height: 52,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFF7C4DFF), Color(0xFFE040FB)]),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: const Color(0xFF7C4DFF).withOpacity(0.4), blurRadius: 16, offset: const Offset(0, 6))],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fitur pembayaran akan segera hadir! 🚀'), behavior: SnackBarBehavior.floating)); },
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                      child: const Text('Langganan Sekarang - Rp 49.000/bln', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextButton(onPressed: () {}, child: const Text('Pulihkan Pembelian', style: TextStyle(color: Colors.white38, fontSize: 11))),
-                ]),
-              ),
-            ]),
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _premiumBenefit(IconData icon, String title, String subtitle, Color color) {
-    return Row(children: [
-      Container(padding: const EdgeInsets.all(9), decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-        child: Icon(icon, color: color, size: 18)),
-      const SizedBox(width: 12),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
-        Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 11)),
-      ])),
-    ]);
-  }
+
+  // Premium modal now uses shared widget from premium_modal.dart
+  void _showPremiumModal(BuildContext context) =>
+      showKreaseaPremiumModal(context);
 
   // ── BANNER SLIDESHOW ──
   Widget _buildBannerSlideshow() {
@@ -728,4 +789,107 @@ class _NotifItem {
   final String time;
   final bool isNew;
   const _NotifItem({required this.icon, required this.color, required this.title, required this.subtitle, required this.time, this.isNew = false});
+}
+
+// ═══════════════════ GLASS APPBAR HELPERS ═══════════════════
+
+/// Badge kecil bertipe pill dengan glass style
+class _GlassBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _GlassBadge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.25), width: 0.8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.1,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+/// Mini chip kredit dengan emoji + angka
+class _MiniCreditChip extends StatelessWidget {
+  final String emoji;
+  final int count;
+  final int max;
+  const _MiniCreditChip({required this.emoji, required this.count, required this.max});
+
+  @override
+  Widget build(BuildContext context) {
+    final isEmpty = count <= 0;
+    final isLow = count == 1;
+    final color = isEmpty ? Colors.redAccent : isLow ? Colors.orange : Colors.white54;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: isEmpty
+            ? Colors.red.withOpacity(0.12)
+            : Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        '$emoji $count',
+        style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+/// Tombol aksi glass untuk AppBar
+class _GlassActionButton extends StatelessWidget {
+  final IconData? icon;
+  final Color? iconColor;
+  final Color? bgColor;
+  final VoidCallback? onTap;
+  final Widget? child;
+
+  const _GlassActionButton({
+    this.icon,
+    this.iconColor,
+    this.bgColor,
+    required this.onTap,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = bgColor ?? Colors.white.withOpacity(0.07);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: child != null
+            ? EdgeInsets.zero
+            : const EdgeInsets.all(9),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.1), width: 0.8),
+        ),
+        child: child ??
+            Icon(
+              icon!,
+              size: 20,
+              color: iconColor ?? Colors.white.withOpacity(0.85),
+            ),
+      ),
+    );
+  }
 }

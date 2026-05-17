@@ -76,11 +76,163 @@ class _AiTextScreenState extends ConsumerState<AiTextScreen> {
       );
       setState(() => _results = captions);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), behavior: SnackBarBehavior.floating));
+      if (!mounted) return;
+      final msg = e.toString().toLowerCase();
+      final isKeyError = msg.contains('quota') || msg.contains('429') ||
+          msg.contains('rate') || msg.contains('invalid') ||
+          msg.contains('tidak valid') || msg.contains('cooldown') ||
+          msg.contains('semua');
+
+      if (isKeyError) {
+        _showAiErrorDialog(e.toString());
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e', style: const TextStyle(fontSize: 12)),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red.shade900,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  void _showAiErrorDialog(String errorMessage) {
+    final isAllInvalid = errorMessage.toLowerCase().contains('semua') &&
+        errorMessage.toLowerCase().contains('tidak valid');
+    final isQuota = errorMessage.toLowerCase().contains('quota') ||
+        errorMessage.toLowerCase().contains('cooldown') ||
+        errorMessage.toLowerCase().contains('429');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A2E),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded,
+                      color: Colors.orange, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isAllInvalid ? 'API Key Tidak Valid' : 'AI Sedang Sibuk',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        isAllInvalid
+                            ? 'Semua key sudah expired'
+                            : 'Quota gratis habis hari ini',
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.5), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('💡 Cara Atasi:',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13)),
+                    const SizedBox(height: 8),
+                    if (isAllInvalid) ...[
+                      _step('1', 'Buka aistudio.google.com/app/apikey'),
+                      _step('2', 'Buat API key baru (gratis)'),
+                      _step('3', 'Update GEMINI_KEY_1 di file .env'),
+                      _step('4', 'Restart aplikasi'),
+                    ] else ...[
+                      _step('1', 'Tunggu hingga besok (reset 00:00 WIB)'),
+                      _step('2', 'ATAU tambah API key baru di .env'),
+                      _step('3',
+                          'Buka aistudio.google.com/app/apikey (gratis)'),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: TextButton.styleFrom(
+                    backgroundColor: const Color(0xFF3D5AFE).withOpacity(0.15),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Mengerti',
+                      style: TextStyle(color: Colors.white70)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _step(String num, String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: const Color(0xFF3D5AFE).withOpacity(0.3),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(num,
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text,
+                style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          ),
+        ]),
+      );
+
 
   @override
   Widget build(BuildContext context) {

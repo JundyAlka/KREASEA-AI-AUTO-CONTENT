@@ -1,42 +1,63 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Env — Single source of truth untuk semua konfigurasi
+///
+/// Strategy: baca .env → fallback hardcoded jika kosong (Flutter Web).
+///
+/// STATUS KEY (2026-05-15):
+///   KEY_1 = AIzaSyA4sX... → ✅ VALID  (gemini-2.0-flash bekerja)
+///   KEY_2 = AIzaSyAAXo... → ❌ INVALID (revoked)
+///   KEY_3 = AIzaSyA3n8... → ❌ INVALID (revoked)
+///   KEY_4 = AIzaSyAvP1... → ❌ INVALID (revoked)
+///   KEY_5 = AIzaSyA73q... → ❌ INVALID (revoked)
+///
+/// Untuk menambah key baru: https://aistudio.google.com/app/apikey
 class Env {
-  // ── Backend URL ─────────────────────────────────────────
-  static String get backendUrl =>
-      dotenv.env['BACKEND_URL'] ?? 'http://localhost:3001';
+  // ── Backend ─────────────────────────────────────────────────
+  static String get backendUrl => _get('BACKEND_URL', 'http://localhost:3001');
 
-  // ── Gemini API Keys (5 keys untuk multi-key rotation) ───
-  static String get geminiKey1 =>
-      dotenv.env['GEMINI_KEY_1'] ?? '';
-  static String get geminiKey2 =>
-      dotenv.env['GEMINI_KEY_2'] ?? '';
-  static String get geminiKey3 =>
-      dotenv.env['GEMINI_KEY_3'] ?? '';
-  static String get geminiKey4 =>
-      dotenv.env['GEMINI_KEY_4'] ?? '';
-  static String get geminiKey5 =>
-      dotenv.env['GEMINI_KEY_5'] ?? '';
+  // ── Gemini API Keys ──────────────────────────────────────────
+  // Key 1 = satu-satunya yang valid saat ini (AIzaSyA4sX...)
+  // ⚠️ SECURITY: Semua API key HARUS diisi via file .env (lihat .env.example)
+  // Jangan pernah hardcode key di sini!
+  static String get geminiKey1 => _get('GEMINI_KEY_1', '');
+  static String get geminiKey2 => _get('GEMINI_KEY_2', '');
+  static String get geminiKey3 => _get('GEMINI_KEY_3', '');
+  static String get geminiKey4 => _get('GEMINI_KEY_4', '');
+  static String get geminiKey5 => _get('GEMINI_KEY_5', '');
+  // Key 6: hanya dari .env jika user sudah isi key baru
+  static String get geminiKey6 => _get('GEMINI_KEY_6', '');
 
-  /// Semua Gemini key yang aktif (tidak kosong)
+  /// Semua Gemini key yang tidak kosong
   static List<String> get geminiKeys => [
-    geminiKey1, geminiKey2, geminiKey3, geminiKey4, geminiKey5,
-  ].where((k) => k.isNotEmpty).toList();
+        geminiKey1,
+        geminiKey2,
+        geminiKey3,
+        geminiKey4,
+        geminiKey5,
+        geminiKey6,
+      ].where((k) => k.isNotEmpty).toList();
 
-  // ── OpenAI Fallback ──────────────────────────────────────
-  static String get openAiKey =>
-      dotenv.env['OPENAI_API_KEY'] ?? '';
+  // ── OpenAI Fallback ──────────────────────────────────────────
+  // ⚠️ SECURITY: Isi OPENAI_API_KEY di file .env (jangan hardcode!)
+  static String get openAiKey => _get('OPENAI_API_KEY', '');
 
-  // ── Stability AI ─────────────────────────────────────────
-  static String get stabilityApiKey =>
-      dotenv.env['STABILITY_API_KEY'] ?? '';
+  // ── Stability AI ─────────────────────────────────────────────
+  // ⚠️ SECURITY: Isi STABILITY_API_KEY di file .env (jangan hardcode!)
+  static String get stabilityApiKey => _get('STABILITY_API_KEY', '');
 
-  // ── Firebase ─────────────────────────────────────────────
+  // ── Firebase ─────────────────────────────────────────────────
+  // ⚠️ SECURITY: Isi FIREBASE_API_KEY di file .env (jangan hardcode!)
   static String get firebaseApiKey =>
-      dotenv.env['FIREBASE_API_KEY'] ?? 'AIzaSyD9bchOiEyGpmb8wn0ov5jNOrRG25zHeJE';
+      _get('FIREBASE_API_KEY', '');
 
-  // ── Legacy (deprecated tapi aman) ───────────────────────
-  @Deprecated('Gunakan geminiKeys list. Key 1-5 tersedia.')
+  // ── Helper ───────────────────────────────────────────────────
+  static String _get(String key, String fallback) {
+    final v = dotenv.env[key];
+    return (v == null || v.isEmpty) ? fallback : v;
+  }
+
+  @Deprecated('Gunakan geminiKeys list.')
   static String get geminiApiKey => geminiKey1;
 
   @Deprecated('Gunakan stabilityApiKey.')
