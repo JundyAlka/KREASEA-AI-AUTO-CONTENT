@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/ai_text_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/credit_service.dart';
+import '../../services/gemini_service.dart';
 import '../../models/user_profile.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_container.dart';
@@ -98,6 +99,21 @@ class _AiTextScreenState extends ConsumerState<AiTextScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // ── Improve caption (tanpa kurangi credit) ─────────────────
+  Future<String?> _improveCaption(String currentText) async {
+    final gemini = ref.read(geminiServiceProvider);
+    return await gemini.generateText(
+      systemPrompt:
+          'Kamu adalah copywriter UMKM Indonesia profesional. '
+          'Tugas: perbaiki dan tingkatkan kualitas caption media sosial yang diberikan. '
+          'Buat lebih menarik, persuasif, dan sesuai untuk bisnis UMKM Indonesia. '
+          'Pertahankan tone dan tujuan aslinya. '
+          'Output HANYA caption yang sudah diperbaiki, tanpa penjelasan.',
+      userPrompt: 'Improve caption ini:\n\n$currentText',
+      temperature: 0.8,
+    );
   }
 
   void _showAiErrorDialog(String errorMessage) {
@@ -326,7 +342,22 @@ class _AiTextScreenState extends ConsumerState<AiTextScreen> {
             const SizedBox(height: 12),
             ..._results.asMap().entries.map((e) => Padding(
               padding: const EdgeInsets.only(bottom: 14),
-              child: AiResultCard(title: 'Caption ${e.key + 1}', content: e.value, variantIndex: e.key + 1, accentColor: const Color(0xFF3D5AFE)),
+              child: AiResultCard(
+                title: 'Caption ${e.key + 1}',
+                content: e.value,
+                variantIndex: e.key + 1,
+                accentColor: const Color(0xFF3D5AFE),
+                onRegenerate: _isLoading ? null : _generate,
+                onImprove: _improveCaption,
+                onSave: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Tersimpan ke Library!'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
             )),
           ],
         ]))),
