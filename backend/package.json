@@ -16,6 +16,7 @@
     "@fastify/multipart": "^8.3.0",
     "@fastify/rate-limit": "^9.1.0",
     "@google-cloud/firestore": "^7.9.0",
+    "dotenv": "^16.6.1",
     "fastify": "^4.28.1",
     "firebase-admin": "^12.2.0",
     "ioredis": "^5.4.1",

@@ -10,6 +10,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class Env {
   // ── Backend ──────────────────────────────────────────────────
   static String get backendUrl => _get('BACKEND_URL', 'http://localhost:3001');
+  static String get devApiSecret => _get('DEV_API_SECRET', '');
 
   // ── Gemini API Keys ──────────────────────────────────────────
   // ⚠️ SECURITY: Isi key di file .env — JANGAN hardcode di sini!
@@ -35,6 +36,15 @@ class Env {
 
   // ── Stability AI ─────────────────────────────────────────────
   static String get stabilityApiKey => _get('STABILITY_API_KEY', '');
+
+  // ── Pollinations AI (Image Generation) ──────────────────────
+  /// Token untuk authenticated Pollinations requests (bypass payment gate)
+  /// Daftar gratis di https://auth.pollinations.ai
+  static String get pollinationsApiKey => _get('POLLINATIONS_API_KEY', '');
+
+  // ── NVIDIA NIM ───────────────────────────────────────────────
+  /// Untuk self-hosted NIM atau NVIDIA cloud endpoints
+  static String get nvidiaApiKey => _get('NVIDIA_API_KEY', '');
 
   // ── Firebase ─────────────────────────────────────────────────
   static String get firebaseApiKey => _get('FIREBASE_API_KEY', '');

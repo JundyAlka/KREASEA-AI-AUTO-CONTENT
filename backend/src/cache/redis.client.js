@@ -23,14 +23,15 @@ async function initRedis() {
       lazyConnect: true,
     });
 
+    redis.on('error', (err) => {
+      console.warn('[Cache] Redis error, fallback in-memory tetap aktif:', err.message);
+    });
+
     await redis.connect();
     console.log('[Cache] Redis terhubung:', redisUrl.replace(/:\/\/.*@/, '://***@'));
-
-    redis.on('error', (err) => {
-      console.error('[Cache] Redis error:', err.message);
-    });
   } catch (err) {
     console.warn('[Cache] Gagal connect Redis, fallback ke in-memory:', err.message);
+    if (redis) redis.disconnect();
     redis = null;
   }
 }

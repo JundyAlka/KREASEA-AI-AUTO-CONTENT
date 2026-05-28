@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/export_service.dart';
 import '../theme/app_theme.dart';
 
 // ══════════════════════════════════════════════════════════════════
@@ -42,6 +42,7 @@ class _AiResultCardState extends State<AiResultCard>
   bool _isEditing = false;
   bool _isImproving = false;
   bool _isCopied = false;
+  final ExportService _exportService = createExportService();
 
   @override
   void initState() {
@@ -102,26 +103,68 @@ class _AiResultCardState extends State<AiResultCard>
     if (mounted) setState(() => _isCopied = false);
   }
 
-  void _shareText() {
-    // On web: copy + show message. On mobile: use Share.share if available
-    Clipboard.setData(ClipboardData(text: _controller.text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.share_rounded, color: Colors.white, size: 16),
-            SizedBox(width: 8),
-            Text('Teks disalin! Paste ke WhatsApp / Instagram',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-          ],
+  Future<void> _downloadText() async {
+    try {
+      final result = await _exportService.downloadText(
+        title: widget.title,
+        text: _controller.text,
+      );
+      if (mounted) {
+        _showSnack(result.message, Icons.download_done_rounded,
+            const Color(0xFF00BCD4));
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('Gagal unduh: $e', Icons.error_rounded, Colors.red.shade800);
+      }
+    }
+  }
+
+  Future<void> _shareText() async {
+    try {
+      final result = await _exportService.shareText(
+        title: widget.title,
+        text: _controller.text,
+      );
+      if (mounted) {
+        _showSnack(
+            result.message, Icons.share_rounded, const Color(0xFF25D366));
+      }
+    } catch (e) {
+      await Clipboard.setData(ClipboardData(text: _controller.text));
+      if (mounted) {
+        _showSnack(
+          'Share gagal. Caption disalin ke clipboard.',
+          Icons.copy_rounded,
+          const Color(0xFF25D366),
+        );
+      }
+    }
+  }
+
+  void _showSnack(String message, IconData icon, Color color) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(icon, color: Colors.white, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(message,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+          backgroundColor: color,
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
         ),
-        backgroundColor: const Color(0xFF25D366),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+      );
   }
 
   Future<void> _improveText() async {
@@ -138,16 +181,15 @@ class _AiResultCardState extends State<AiResultCard>
           SnackBar(
             content: const Row(
               children: [
-                Icon(Icons.auto_awesome_rounded,
-                    color: Colors.white, size: 16),
+                Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
                 SizedBox(width: 8),
                 Text('Caption berhasil diperbaiki!'),
               ],
             ),
             backgroundColor: const Color(0xFF7C4DFF),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
             duration: const Duration(seconds: 2),
           ),
@@ -227,8 +269,10 @@ class _AiResultCardState extends State<AiResultCard>
               width: 26,
               height: 26,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                    colors: [widget.accentColor, widget.accentColor.withOpacity(0.6)]),
+                gradient: LinearGradient(colors: [
+                  widget.accentColor,
+                  widget.accentColor.withOpacity(0.6)
+                ]),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
@@ -340,7 +384,10 @@ class _AiResultCardState extends State<AiResultCard>
   Widget _buildActionBar() {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-      child: Row(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           // Copy
           _ActionChipNew(
@@ -349,7 +396,13 @@ class _AiResultCardState extends State<AiResultCard>
             color: _isCopied ? AppColors.success : widget.accentColor,
             onTap: _copyToClipboard,
           ),
-          const SizedBox(width: 8),
+
+          _ActionChipNew(
+            icon: Icons.download_rounded,
+            label: 'Unduh',
+            color: const Color(0xFF00BCD4),
+            onTap: _downloadText,
+          ),
 
           // Share
           _ActionChipNew(
@@ -358,7 +411,6 @@ class _AiResultCardState extends State<AiResultCard>
             color: const Color(0xFF25D366),
             onTap: _shareText,
           ),
-          const SizedBox(width: 8),
 
           // Improve dengan Gemini
           if (widget.onImprove != null)
@@ -371,7 +423,13 @@ class _AiResultCardState extends State<AiResultCard>
               onTap: _isImproving ? () {} : _improveText,
             ),
 
-          const Spacer(),
+          if (widget.onRegenerate != null)
+            _ActionChipNew(
+              icon: Icons.refresh_rounded,
+              label: 'Ulang',
+              color: const Color(0xFFE91E63),
+              onTap: widget.onRegenerate!,
+            ),
 
           // Save to library
           if (widget.onSave != null)
@@ -388,22 +446,40 @@ class _AiResultCardState extends State<AiResultCard>
 }
 
 // ══════════════════════════════════════════════════════════════════
-// IMAGE RESULT CARD — dengan download, share, fullscreen
+// IMAGE RESULT CARD — Supports base64 data URI & network URL
 // ══════════════════════════════════════════════════════════════════
 
 class AiImageResultCard extends StatefulWidget {
-  final String base64Image;
+  /// URL gambar:
+  ///   - 'data:image/png;base64,...' → NVIDIA FLUX result
+  ///   - 'https://...'              → Pollinations fallback
+  final String imageUrl;
   final String prompt;
   final VoidCallback? onRegenerate;
   final VoidCallback? onSave;
 
   const AiImageResultCard({
     super.key,
-    required this.base64Image,
+    required this.imageUrl,
     this.prompt = '',
     this.onRegenerate,
     this.onSave,
   });
+
+  // Helper: cek apakah URL ini base64 data URI
+  bool get isBase64 => imageUrl.startsWith('data:image');
+
+  // Extract bytes dari data URI jika base64
+  Uint8List? get imageBytes {
+    if (!isBase64) return null;
+    try {
+      final commaIdx = imageUrl.indexOf(',');
+      if (commaIdx == -1) return null;
+      return base64Decode(imageUrl.substring(commaIdx + 1));
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   State<AiImageResultCard> createState() => _AiImageResultCardState();
@@ -413,17 +489,28 @@ class _AiImageResultCardState extends State<AiImageResultCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   late Animation<double> _scaleAnim;
+  final ExportService _exportService = createExportService();
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 450),
     );
-    _scaleAnim = CurvedAnimation(
-        parent: _animController, curve: Curves.easeOutBack);
+    _scaleAnim =
+        CurvedAnimation(parent: _animController, curve: Curves.easeOutBack);
     _animController.forward();
+  }
+
+  @override
+  void didUpdateWidget(AiImageResultCard old) {
+    super.didUpdateWidget(old);
+    // Jika URL gambar berubah → restart animasi agar gambar baru muncul dengan mulus
+    if (old.imageUrl != widget.imageUrl) {
+      _animController.reset();
+      _animController.forward();
+    }
   }
 
   @override
@@ -433,92 +520,218 @@ class _AiImageResultCardState extends State<AiImageResultCard>
   }
 
   void _viewFullscreen(BuildContext context) {
+    final imageWidget = widget.isBase64
+        ? () {
+            final bytes = widget.imageBytes;
+            if (bytes == null) {
+              return const Center(
+                child: Icon(Icons.broken_image_rounded,
+                    color: Colors.white24, size: 64),
+              );
+            }
+            return Image.memory(bytes, fit: BoxFit.contain);
+          }()
+        : Image.network(
+            widget.imageUrl,
+            fit: BoxFit.contain,
+            loadingBuilder: (_, child, progress) {
+              if (progress == null) return child;
+              return const Center(
+                child: CircularProgressIndicator(color: Colors.white54),
+              );
+            },
+            errorBuilder: (_, __, ___) => const Center(
+              child: Icon(Icons.broken_image_rounded,
+                  color: Colors.white24, size: 64),
+            ),
+          );
+
     showDialog(
       context: context,
       barrierColor: Colors.black87,
-      builder: (ctx) => GestureDetector(
-        onTap: () => Navigator.pop(ctx),
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          body: Stack(
-            children: [
-              Center(
-                child: InteractiveViewer(
-                  child: Image.memory(
-                    _decodeBase64(),
-                    fit: BoxFit.contain,
+      builder: (ctx) => Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: imageWidget,
+              ),
+            ),
+            Positioned(
+              top: 48,
+              right: 16,
+              child: GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: const Icon(Icons.close_rounded, color: Colors.white),
                 ),
               ),
-              Positioned(
-                top: 50,
-                right: 16,
-                child: IconButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  icon: const Icon(Icons.close_rounded, color: Colors.white),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black54,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  void _downloadImage(BuildContext context) {
-    // On web: trigger browser download
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(children: [
-          Icon(Icons.download_done_rounded, color: Colors.white, size: 16),
-          SizedBox(width: 8),
-          Text('Tap & hold gambar untuk simpan'),
-        ]),
-        backgroundColor: const Color(0xFF3D5AFE),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
-  }
-
-  void _shareImage(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(children: [
-          Icon(Icons.share_rounded, color: Colors.white, size: 16),
-          SizedBox(width: 8),
-          Text('Tap & hold gambar → Share'),
-        ]),
-        backgroundColor: const Color(0xFF25D366),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
-  }
-
-  dynamic _decodeBase64() {
+  Future<void> _downloadImage(BuildContext context) async {
     try {
-      return base64Decode(widget.base64Image);
-    } catch (_) {
-      return Uint8List(0);
+      final result = await _exportService.downloadImage(
+        title: 'desain-kreasea',
+        imageUrl: widget.imageUrl,
+        prompt: widget.prompt,
+      );
+      if (context.mounted) {
+        _showImageSnack(context, result.message, Icons.download_done_rounded,
+            const Color(0xFF00BCD4));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        _showImageSnack(context, 'Gagal unduh gambar: $e', Icons.error_rounded,
+            Colors.red.shade800);
+      }
     }
+  }
+
+  Future<void> _shareImage(BuildContext context) async {
+    try {
+      final result = await _exportService.shareImage(
+        title: 'desain-kreasea',
+        imageUrl: widget.imageUrl,
+        prompt: widget.prompt,
+      );
+      if (context.mounted) {
+        _showImageSnack(context, result.message, Icons.share_rounded,
+            const Color(0xFF25D366));
+      }
+    } catch (e) {
+      final fallback =
+          widget.isBase64 ? 'Gambar dibuat dengan KreaSea AI' : widget.imageUrl;
+      await Clipboard.setData(ClipboardData(text: fallback));
+      if (context.mounted) {
+        _showImageSnack(
+          context,
+          'Share gagal. Info gambar disalin ke clipboard.',
+          Icons.copy_rounded,
+          const Color(0xFF25D366),
+        );
+      }
+    }
+  }
+
+  void _showImageSnack(
+      BuildContext context, String message, IconData icon, Color color) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(message),
+            ),
+          ]),
+          backgroundColor: color,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+  }
+
+  // ── Smart image builder: base64 → Image.memory, URL → Image.network ──
+  Widget _buildImageWidget() {
+    final errorFallback = Container(
+      height: 200,
+      color: Colors.white.withOpacity(0.04),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.image_not_supported_rounded,
+              color: Colors.white24, size: 48),
+          const SizedBox(height: 8),
+          const Text('Gagal memuat gambar',
+              style: TextStyle(color: Colors.white30, fontSize: 12)),
+          const SizedBox(height: 8),
+          if (widget.onRegenerate != null)
+            TextButton.icon(
+              onPressed: widget.onRegenerate,
+              icon: const Icon(Icons.refresh_rounded, size: 14),
+              label: const Text('Coba Lagi', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFE91E63),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    if (widget.isBase64) {
+      // NVIDIA FLUX → Image.memory dari bytes
+      final bytes = widget.imageBytes;
+      if (bytes == null) return errorFallback;
+      return Image.memory(
+        bytes,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        errorBuilder: (_, __, ___) => errorFallback,
+      );
+    }
+
+    // Pollinations fallback → Image.network
+    return Image.network(
+      widget.imageUrl,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        final progress = loadingProgress.expectedTotalBytes != null
+            ? loadingProgress.cumulativeBytesLoaded /
+                loadingProgress.expectedTotalBytes!
+            : null;
+        return Container(
+          height: 280,
+          color: Colors.white.withOpacity(0.04),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: CircularProgressIndicator(
+                  value: progress,
+                  color: const Color(0xFFE91E63),
+                  backgroundColor: Colors.white12,
+                  strokeWidth: 3,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                progress != null
+                    ? 'Loading ${(progress * 100).toInt()}%'
+                    : 'Memuat gambar...',
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+            ],
+          ),
+        );
+      },
+      errorBuilder: (_, __, ___) => errorFallback,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    late final imageBytes = () {
-      try {
-        return base64Decode(widget.base64Image);
-      } catch (_) {
-        return null;
-      }
-    }();
-
     return ScaleTransition(
       scale: _scaleAnim,
       child: ClipRRect(
@@ -538,119 +751,107 @@ class _AiImageResultCardState extends State<AiImageResultCard>
                     ClipRRect(
                       borderRadius:
                           const BorderRadius.vertical(top: Radius.circular(20)),
-                      child: imageBytes != null
-                          ? Image.memory(
-                              imageBytes,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                            )
-                          : Container(
-                              height: 200,
-                              color: Colors.white.withOpacity(0.05),
-                              child: const Center(
-                                child: Icon(Icons.broken_image_rounded,
-                                    color: Colors.white24, size: 48),
-                              ),
-                            ),
+                      child: _buildImageWidget(),
                     ),
-                    // Fullscreen hint overlay
+                    // Fullscreen hint badge
                     Positioned(
                       top: 10,
                       right: 10,
                       child: Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: Colors.black45,
+                          color: Colors.black54,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.fullscreen_rounded,
-                            color: Colors.white70, size: 18),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.fullscreen_rounded,
+                                color: Colors.white70, size: 16),
+                            SizedBox(width: 2),
+                            Text('Tap',
+                                style: TextStyle(
+                                    color: Colors.white54, fontSize: 9)),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
 
-              // ── Prompt preview ──
+              // ── Prompt preview ──────────────────────────────
               if (widget.prompt.isNotEmpty)
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.04),
+                    color: Colors.white.withOpacity(0.03),
                     border: Border(
                         top: BorderSide(color: Colors.white.withOpacity(0.06))),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.auto_awesome_rounded,
-                          size: 12, color: Colors.white30),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          widget.prompt,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.35),
-                            fontSize: 10,
-                            fontStyle: FontStyle.italic,
-                          ),
+                  child: Row(children: [
+                    const Icon(Icons.auto_awesome_rounded,
+                        size: 11, color: Colors.white24),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        widget.prompt,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.3),
+                          fontSize: 10,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ]),
                 ),
 
-              // ── Action bar ──
+              // ── Action bar ──────────────────────────────────
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.04),
-                  borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(20)),
+                  borderRadius:
+                      const BorderRadius.vertical(bottom: Radius.circular(20)),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
+                child: Row(children: [
+                  Expanded(
                       child: _ImageActionBtn(
-                        icon: Icons.fullscreen_rounded,
-                        label: 'Lihat',
-                        color: const Color(0xFF3D5AFE),
-                        onTap: () => _viewFullscreen(context),
-                      ),
-                    ),
+                    icon: Icons.fullscreen_rounded,
+                    label: 'Fullscreen',
+                    color: const Color(0xFF3D5AFE),
+                    onTap: () => _viewFullscreen(context),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: _ImageActionBtn(
+                    icon: Icons.download_rounded,
+                    label: 'Unduh',
+                    color: const Color(0xFF00BCD4),
+                    onTap: () => _downloadImage(context),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: _ImageActionBtn(
+                    icon: Icons.share_rounded,
+                    label: 'Share',
+                    color: const Color(0xFF25D366),
+                    onTap: () => _shareImage(context),
+                  )),
+                  if (widget.onRegenerate != null) ...[
                     const SizedBox(width: 8),
                     Expanded(
-                      child: _ImageActionBtn(
-                        icon: Icons.download_rounded,
-                        label: 'Download',
-                        color: const Color(0xFF00BCD4),
-                        onTap: () => _downloadImage(context),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _ImageActionBtn(
-                        icon: Icons.share_rounded,
-                        label: 'Share',
-                        color: const Color(0xFF25D366),
-                        onTap: () => _shareImage(context),
-                      ),
-                    ),
-                    if (widget.onRegenerate != null) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
                         child: _ImageActionBtn(
-                          icon: Icons.refresh_rounded,
-                          label: 'Ulang',
-                          color: const Color(0xFFE91E63),
-                          onTap: widget.onRegenerate!,
-                        ),
-                      ),
-                    ],
+                      icon: Icons.refresh_rounded,
+                      label: 'Ulang',
+                      color: const Color(0xFFE91E63),
+                      onTap: widget.onRegenerate!,
+                    )),
                   ],
-                ),
+                ]),
               ),
             ],
           ),
@@ -697,9 +898,7 @@ class _ActionChipNew extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700),
+                  color: color, fontSize: 11, fontWeight: FontWeight.w700),
             ),
           ],
         ),

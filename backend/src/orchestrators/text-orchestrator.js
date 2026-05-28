@@ -39,8 +39,10 @@ const keyPool = loadTextKeys();
 let currentIndex = 0; // pointer round-robin
 
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-exp';
-const VISION_MODEL = process.env.GEMINI_VISION_MODEL || 'gemini-1.5-pro';
+const MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
+const VISION_MODEL = process.env.GEMINI_VISION_MODEL || 'gemini-2.0-flash';
+// Fallback models jika primary gagal
+const MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
 
 // ── Cooldown Management ──────────────────────────────────────
 const COOLDOWN_429_MS = 60_000;   // 1 menit jika rate limit

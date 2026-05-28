@@ -154,10 +154,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   PreferredSizeWidget _buildAppBar(UserProfile profile, bool isDark) {
-    final displayName = profile.businessName.isNotEmpty
-        ? profile.businessName
-        : (profile.email.isNotEmpty ? profile.email.split('@').first : 'Pengguna');
-    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+    // Urutan fallback: businessName → email prefix → default label
+    final rawName = profile.businessName.trim();
+    final rawEmail = profile.email.trim();
+
+    final displayName = rawName.isNotEmpty
+        ? rawName
+        : rawEmail.isNotEmpty
+            ? (rawEmail.contains('@') ? rawEmail.split('@').first : rawEmail)
+            : 'Pengguna KreaSea';
+
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'K';
     final greeting = _getGreeting();
 
     return PreferredSize(
@@ -262,10 +269,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           // Sub-row: tipe bisnis + credit
                           Row(
                             children: [
-                              if (profile.businessType.isNotEmpty) ...[
-                                _GlassBadge(
-                                  label: profile.businessType,
-                                  color: AppColors.accentLight,
+                              if (profile.businessType.trim().isNotEmpty) ...[
+                                Flexible(
+                                  child: _GlassBadge(
+                                    label: profile.businessType.trim(),
+                                    color: AppColors.accentLight,
+                                  ),
                                 ),
                                 const SizedBox(width: 6),
                               ],
